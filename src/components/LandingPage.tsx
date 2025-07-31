@@ -11,7 +11,7 @@ const LandingPage = () => {
           <div className="flex items-center space-x-2">
             <Mail className="h-8 w-8 text-primary-light" />
             <span className="text-2xl font-bold gradient-primary bg-clip-text text-transparent">
-              EmAIl Insight Helper
+              EmAil Insight Helper
             </span>
           </div>
           <div className="ml-auto flex items-center space-x-4">
@@ -62,7 +62,7 @@ const LandingPage = () => {
         <div className="container mx-auto px-4">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Why Choose EmAIl Insight Helper?
+              Why Choose EmAil Insight Helper?
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Transform the way you manage and understand your email communications
