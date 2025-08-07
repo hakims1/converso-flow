@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, BarChart3, CheckCircle, Clock, Shield, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 import heroBackground from "@/assets/hero-background.jpg";
 const LandingPage = () => {
   return <div className="min-h-screen bg-background">
@@ -16,8 +17,12 @@ const LandingPage = () => {
           <div className="ml-auto flex items-center space-x-4">
             <Button variant="ghost">Features</Button>
             <Button variant="ghost">Pricing</Button>
-            <Button variant="outline">Sign In</Button>
-            <Button className="gradient-primary text-white border-0">Get Started</Button>
+            <Button variant="outline" asChild>
+              <Link to="/auth">Sign In</Link>
+            </Button>
+            <Button className="gradient-primary text-white border-0" asChild>
+              <Link to="/auth">Get Started</Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -45,9 +50,11 @@ const LandingPage = () => {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="gradient-primary text-white border-0 shadow-primary text-center bg-amber-300 hover:bg-amber-200">
-                <Mail className="mr-2 h-5 w-5" />
-                Connect Gmail & Start Free
+              <Button size="lg" className="gradient-primary text-white border-0 shadow-primary text-center bg-amber-300 hover:bg-amber-200" asChild>
+                <Link to="/auth">
+                  <Mail className="mr-2 h-5 w-5" />
+                  Connect Gmail & Start Free
+                </Link>
               </Button>
               <Button size="lg" variant="outline" className="shadow-card bg-white/10 text-white border-white/20 hover:bg-white/20">
                 Watch Demo
@@ -218,8 +225,8 @@ const LandingPage = () => {
                     <span>Secure Gmail connection</span>
                   </li>
                 </ul>
-                <Button className="w-full gradient-primary text-white border-0">
-                  Get Started Free
+                <Button className="w-full gradient-primary text-white border-0" asChild>
+                  <Link to="/auth">Get Started Free</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -263,8 +270,8 @@ const LandingPage = () => {
                     <span>Priority customer support</span>
                   </li>
                 </ul>
-                <Button className="w-full gradient-primary text-white border-0 shadow-primary">
-                  Upgrade to Pro
+                <Button className="w-full gradient-primary text-white border-0 shadow-primary" asChild>
+                  <Link to="/auth">Upgrade to Pro</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -282,9 +289,11 @@ const LandingPage = () => {
             <p className="text-xl opacity-90 max-w-2xl mx-auto">
               Join thousands of professionals who are already using AI to make their email more productive
             </p>
-            <Button size="lg" variant="secondary" className="bg-white text-primary hover:bg-white/90 shadow-hover">
-              <Mail className="mr-2 h-5 w-5" />
-              Connect Gmail & Start Free
+            <Button size="lg" variant="secondary" className="bg-white text-primary hover:bg-white/90 shadow-hover" asChild>
+              <Link to="/auth">
+                <Mail className="mr-2 h-5 w-5" />
+                Connect Gmail & Start Free
+              </Link>
             </Button>
           </div>
         </div>
