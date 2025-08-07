@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, BarChart3, CheckCircle, Clock, Shield, Zap } from "lucide-react";
+import heroBackground from "@/assets/hero-background.jpg";
 
 const LandingPage = () => {
   return (
@@ -24,17 +25,25 @@ const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 lg:py-32">
-        <div className="container mx-auto px-4">
+      <section 
+        className="relative py-20 lg:py-32 overflow-hidden"
+        style={{
+          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${heroBackground})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4 relative z-10">
           <div className="text-center space-y-8">
             <div className="space-y-4">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white">
                 Transform Your Email Into
                 <span className="gradient-primary bg-clip-text text-transparent block">
                   Actionable Insights
                 </span>
               </h1>
-              <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              <p className="text-xl text-white/90 max-w-3xl mx-auto">
                 Connect your Gmail account and let AI analyze your conversations to uncover patterns, 
                 track action items, and boost your productivity like never before.
               </p>
@@ -45,12 +54,12 @@ const LandingPage = () => {
                 <Mail className="mr-2 h-5 w-5" />
                 Connect Gmail & Start Free
               </Button>
-              <Button size="lg" variant="outline" className="shadow-card">
+              <Button size="lg" variant="outline" className="shadow-card bg-white/10 text-white border-white/20 hover:bg-white/20">
                 Watch Demo
               </Button>
             </div>
             
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-white/80">
               🔒 Secure OAuth connection • ✨ 10 conversations free • 🚀 No credit card required
             </div>
           </div>
