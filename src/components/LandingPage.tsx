@@ -2,10 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, BarChart3, CheckCircle, Clock, Shield, Zap } from "lucide-react";
 import heroBackground from "@/assets/hero-background.jpg";
-
 const LandingPage = () => {
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center">
@@ -25,21 +23,18 @@ const LandingPage = () => {
       </header>
 
       {/* Hero Section */}
-      <section 
-        className="relative py-20 lg:py-32 overflow-hidden"
-        style={{
-          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${heroBackground})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      >
+      <section className="relative py-20 lg:py-32 overflow-hidden" style={{
+      backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${heroBackground})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
+    }}>
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center space-y-8">
             <div className="space-y-4">
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white">
                 Transform Your Email Into
-                <span className="gradient-primary bg-clip-text text-transparent block">
+                <span className="gradient-primary bg-clip-text block text-yellow-300">
                   Actionable Insights
                 </span>
               </h1>
@@ -50,7 +45,7 @@ const LandingPage = () => {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="gradient-primary text-white border-0 shadow-primary">
+              <Button size="lg" className="gradient-primary text-white border-0 shadow-primary text-center bg-amber-300 hover:bg-amber-200">
                 <Mail className="mr-2 h-5 w-5" />
                 Connect Gmail & Start Free
               </Button>
@@ -345,8 +340,6 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default LandingPage;
