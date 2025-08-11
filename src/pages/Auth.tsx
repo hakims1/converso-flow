@@ -136,9 +136,7 @@ const Auth = () => {
               </span>
             </div>
             <CardTitle className="text-2xl">Connect Your Email Inbox</CardTitle>
-            <CardDescription>
-              Sign in to your account or create a new one to get started
-            </CardDescription>
+            <CardDescription>We never read, share, or store your actual email content. Our AI simply analyzes conversation patterns to create insights that only you can see. Your data is encrypted, secure, and you can revoke access anytime.</CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-6">
