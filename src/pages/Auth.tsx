@@ -72,6 +72,11 @@ const Auth = () => {
               </svg>
               Continue with Google
             </Button>
+            
+            {/* Footer text */}
+            <div className="text-center text-xs text-muted-foreground">
+              By continuing, you agree to our Terms of Service and Privacy Policy
+            </div>
           </CardContent>
         </Card>
       </div>
