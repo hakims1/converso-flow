@@ -22,7 +22,8 @@ export const useGmailPermissions = () => {
     setStatus(prev => ({ ...prev, isChecking: true }));
 
     try {
-      // Always fetch the freshest session in case we just re-authorized
+      // Always refresh and fetch the freshest session in case we just re-authorized
+      try { await supabase.auth.refreshSession(); } catch (e) { console.warn('refreshSession failed (non-fatal):', e); }
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error('Failed to get session:', sessionError);

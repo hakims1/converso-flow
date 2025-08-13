@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
+    const redirectUrl = `${window.location.origin}/auth`;
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
