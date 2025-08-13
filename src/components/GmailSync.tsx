@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,13 +14,23 @@ const GmailSync = () => {
   const [hasInitialSync, setHasInitialSync] = useState(false);
   
   // Check if user has Gmail permissions
-  const hasGmailPermissions = session?.provider_token || session?.provider_refresh_token;
-  const showReauthButton = !hasGmailPermissions || needsReauth;
+  // We can't reliably detect Gmail permissions from token presence alone
+  // We need to try calling the Gmail API to know for sure
+  const hasGmailPermissions = session?.provider_token && !needsReauth;
+  const showReauthButton = !session?.provider_token || needsReauth;
 
   const handleSync = async () => {
     await syncGmail();
     setHasInitialSync(true);
   };
+
+  // Auto-check Gmail permissions on component mount if user is authenticated
+  useEffect(() => {
+    if (session?.provider_token && !hasInitialSync && !needsReauth) {
+      // Automatically try to sync to detect permission issues
+      syncGmail();
+    }
+  }, [session, hasInitialSync, needsReauth, syncGmail]);
 
   const formatDate = (dateString: string) => {
     try {
