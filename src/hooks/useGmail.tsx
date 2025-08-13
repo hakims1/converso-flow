@@ -18,12 +18,14 @@ export interface GmailSyncResponse {
   messages: GmailMessage[];
   totalCount: number;
   error?: string;
+  message?: string;
 }
 
 export const useGmail = () => {
   const [messages, setMessages] = useState<GmailMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [needsReauth, setNeedsReauth] = useState(false);
   const { session } = useAuth();
   const { toast } = useToast();
 
@@ -46,6 +48,17 @@ export const useGmail = () => {
       });
 
       if (error) {
+        // Check if it's a permissions error
+        if (error.message?.includes('GMAIL_PERMISSIONS_REQUIRED') || 
+            (error.details && error.details.includes('403'))) {
+          setNeedsReauth(true);
+          toast({
+            title: 'Gmail Permissions Required',
+            description: 'Please re-authorize Gmail access to sync your emails.',
+            variant: 'destructive'
+          });
+          return;
+        }
         throw error;
       }
 
@@ -54,11 +67,22 @@ export const useGmail = () => {
       if (response.success) {
         setMessages(response.messages);
         setTotalCount(response.totalCount);
+        setNeedsReauth(false);
         toast({
           title: 'Gmail Synced',
           description: `Successfully loaded ${response.messages.length} recent emails.`,
         });
       } else {
+        // Check for specific permission errors
+        if (response.error === 'GMAIL_PERMISSIONS_REQUIRED') {
+          setNeedsReauth(true);
+          toast({
+            title: 'Gmail Permissions Required',
+            description: response.message || 'Please re-authorize Gmail access to sync your emails.',
+            variant: 'destructive'
+          });
+          return;
+        }
         throw new Error(response.error || 'Failed to sync Gmail');
       }
     } catch (error: any) {
@@ -77,6 +101,7 @@ export const useGmail = () => {
     messages,
     loading,
     totalCount,
+    needsReauth,
     syncGmail
   };
 };

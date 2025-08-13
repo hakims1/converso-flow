@@ -9,20 +9,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
 
 const GmailSync = () => {
-  const { messages, loading, totalCount, syncGmail } = useGmail();
+  const { messages, loading, totalCount, needsReauth, syncGmail } = useGmail();
   const { session, signInWithGoogle } = useAuth();
   const [hasInitialSync, setHasInitialSync] = useState(false);
   
   // Check if user has Gmail permissions
   const hasGmailPermissions = session?.provider_token || session?.provider_refresh_token;
-  
-  // Debug logging
-  console.log('Gmail permissions check:', {
-    hasSession: !!session,
-    hasProviderToken: !!session?.provider_token,
-    hasProviderRefreshToken: !!session?.provider_refresh_token,
-    hasGmailPermissions
-  });
+  const showReauthButton = !hasGmailPermissions || needsReauth;
 
   const handleSync = async () => {
     await syncGmail();
@@ -51,25 +44,27 @@ const GmailSync = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!hasGmailPermissions ? (
+          {showReauthButton ? (
             <Alert className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Gmail permissions are required to sync your emails and get AI insights. 
-                Please authorize access to your Gmail to use this feature.
+                {needsReauth 
+                  ? 'Gmail read permissions are missing or expired. Please re-authorize to continue syncing emails.'
+                  : 'Gmail permissions are required to sync your emails and get AI insights. Please authorize access to your Gmail to use this feature.'
+                }
               </AlertDescription>
             </Alert>
           ) : null}
           
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {!hasGmailPermissions ? (
+              {showReauthButton ? (
                 <Button
                   onClick={signInWithGoogle}
                   className="flex items-center gap-2"
                 >
                   <Mail className="h-4 w-4" />
-                  Authorize Gmail Access
+                  {needsReauth ? 'Re-authorize Gmail Access' : 'Authorize Gmail Access'}
                 </Button>
               ) : (
                 <Button

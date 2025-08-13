@@ -69,6 +69,22 @@ Deno.serve(async (req) => {
     if (!gmailResponse.ok) {
       const errorText = await gmailResponse.text()
       console.error('Gmail API error:', errorText)
+      
+      // Check if it's a permissions error
+      if (gmailResponse.status === 403) {
+        return new Response(
+          JSON.stringify({
+            error: 'GMAIL_PERMISSIONS_REQUIRED',
+            message: 'Gmail read permissions are required. Please re-authenticate to grant access.',
+            success: false
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 403,
+          }
+        )
+      }
+      
       throw new Error(`Gmail API error: ${gmailResponse.status} ${errorText}`)
     }
 
