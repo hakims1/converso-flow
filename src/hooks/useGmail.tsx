@@ -52,11 +52,7 @@ export const useGmail = () => {
         if (error.message?.includes('GMAIL_PERMISSIONS_REQUIRED') || 
             (error.details && error.details.includes('403'))) {
           setNeedsReauth(true);
-          toast({
-            title: 'Gmail Permissions Required',
-            description: 'Please re-authorize Gmail access to sync your emails.',
-            variant: 'destructive'
-          });
+          // Don't show toast for permission errors - handled in UI
           return;
         }
         throw error;
@@ -76,11 +72,7 @@ export const useGmail = () => {
         // Check for specific permission errors
         if (response.error === 'GMAIL_PERMISSIONS_REQUIRED') {
           setNeedsReauth(true);
-          toast({
-            title: 'Gmail Permissions Required',
-            description: response.message || 'Please re-authorize Gmail access to sync your emails.',
-            variant: 'destructive'
-          });
+          // Don't show toast for permission errors - handled in UI
           return;
         }
         throw new Error(response.error || 'Failed to sync Gmail');
