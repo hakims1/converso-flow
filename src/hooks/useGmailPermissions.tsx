@@ -19,27 +19,34 @@ export const useGmailPermissions = () => {
   const { session } = useAuth();
 
   const checkPermissions = async () => {
-    if (!session?.provider_token) {
-      setStatus({
-        hasPermissions: false,
-        isChecking: false,
-        needsReauth: true,
-        error: 'Missing Gmail access token'
-      });
-      return;
-    }
-
     setStatus(prev => ({ ...prev, isChecking: true }));
-    
+
     try {
+      // Always fetch the freshest session in case we just re-authorized
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Failed to get session:', sessionError);
+      }
+      const freshSession = sessionData?.session || session;
+
+      if (!freshSession?.access_token) {
+        setStatus({
+          hasPermissions: false,
+          isChecking: false,
+          needsReauth: true,
+          error: 'Not authenticated. Please sign in again.'
+        });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${freshSession.access_token}`,
         },
       });
 
       if (error) {
-        if (error.message?.includes('GMAIL_PERMISSIONS_REQUIRED') || 
+        if (error.message?.includes('GMAIL_PERMISSIONS_REQUIRED') ||
             (error.details && error.details.includes('403'))) {
           setStatus({
             hasPermissions: false,
@@ -49,7 +56,7 @@ export const useGmailPermissions = () => {
           });
           return;
         }
-        
+
         setStatus({
           hasPermissions: false,
           isChecking: false,
@@ -65,7 +72,7 @@ export const useGmailPermissions = () => {
         isChecking: false,
         needsReauth: false
       });
-      
+
     } catch (error: any) {
       console.error('Permission check error:', error);
       setStatus({
@@ -77,19 +84,12 @@ export const useGmailPermissions = () => {
     }
   };
 
-  // Auto-check permissions when session changes
+  // Auto-check permissions when session/access token changes
   useEffect(() => {
-    if (session?.provider_token) {
+    if (session) {
       checkPermissions();
-    } else if (session && !session.provider_token) {
-      setStatus({
-        hasPermissions: false,
-        isChecking: false,
-        needsReauth: true,
-        error: 'No Gmail access token found'
-      });
     }
-  }, [session?.provider_token]);
+  }, [session?.access_token]);
 
   return {
     ...status,

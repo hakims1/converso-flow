@@ -32,6 +32,21 @@ const GmailSync = () => {
     }
   }, [gmailPermissions.hasPermissions, hasInitialSync, loading, syncGmail]);
 
+  // Re-check permissions when returning from OAuth (focus/visibility)
+  useEffect(() => {
+    const onFocus = () => {
+      if (gmailPermissions.needsReauth) {
+        gmailPermissions.checkPermissions();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [gmailPermissions.needsReauth]);
+
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -69,13 +84,23 @@ const GmailSync = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {showReauthButton ? (
-                <Button
-                  onClick={signInWithGoogle}
-                  className="flex items-center gap-2"
-                >
-                  <Mail className="h-4 w-4" />
-                  {gmailPermissions.needsReauth && session?.provider_token ? 'Re-authorize Gmail Access' : 'Authorize Gmail Access'}
-                </Button>
+                <>
+                  <Button
+                    onClick={signInWithGoogle}
+                    className="flex items-center gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    {gmailPermissions.needsReauth && session?.provider_token ? 'Re-authorize Gmail Access' : 'Authorize Gmail Access'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={gmailPermissions.checkPermissions}
+                    className="flex items-center gap-2"
+                    disabled={gmailPermissions.isChecking}
+                  >
+                    {gmailPermissions.isChecking ? 'Rechecking…' : 'Recheck permissions'}
+                  </Button>
+                </>
               ) : (
                 <Button
                   onClick={handleSync}
