@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-google-access-token',
 }
 
 interface GmailMessage {
@@ -45,9 +45,23 @@ Deno.serve(async (req) => {
 
     console.log('Authenticated user:', user.id)
 
-    // Get the user's Google access token from their session
-    const { data: session } = await supabase.auth.getSession()
-    const accessToken = session.session?.provider_token
+    // Determine Google access token (prefer explicit token from client)
+    const explicitToken = req.headers.get('x-google-access-token')
+    let bodyProviderToken: string | null = null
+    try {
+      const body = await req.json()
+      bodyProviderToken = body?.provider_token || body?.providerToken || null
+    } catch {
+      // no body provided or not JSON
+    }
+
+    let accessToken = explicitToken || bodyProviderToken || null
+
+    if (!accessToken) {
+      // Fallback to session (may not contain provider_token in Edge env)
+      const { data: session } = await supabase.auth.getSession()
+      accessToken = session.session?.provider_token || null
+    }
 
     if (!accessToken) {
       throw new Error('No Google access token found. Please re-authenticate with Google.')

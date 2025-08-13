@@ -43,6 +43,7 @@ export const useGmailPermissions = () => {
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
         headers: {
           Authorization: `Bearer ${freshSession.access_token}`,
+          'x-google-access-token': freshSession.provider_token ?? '',
         },
       });
 
