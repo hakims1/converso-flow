@@ -23,6 +23,12 @@ const Auth = () => {
   useEffect(() => {
     if (user && session) {
       console.log('User authenticated, redirecting to dashboard');
+      console.log('User:', user.email);
+      console.log('Session data:', {
+        access_token: !!session.access_token,
+        provider_token: !!session.provider_token,
+        provider_refresh_token: !!session.provider_refresh_token
+      });
       navigate('/dashboard');
     }
   }, [user, session, navigate]);

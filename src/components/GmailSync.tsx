@@ -15,6 +15,14 @@ const GmailSync = () => {
   
   // Check if user has Gmail permissions
   const hasGmailPermissions = session?.provider_token || session?.provider_refresh_token;
+  
+  // Debug logging
+  console.log('Gmail permissions check:', {
+    hasSession: !!session,
+    hasProviderToken: !!session?.provider_token,
+    hasProviderRefreshToken: !!session?.provider_refresh_token,
+    hasGmailPermissions
+  });
 
   const handleSync = async () => {
     await syncGmail();
