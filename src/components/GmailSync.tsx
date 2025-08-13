@@ -26,12 +26,12 @@ const GmailSync = () => {
 
   // Auto-check Gmail permissions on component mount if user is authenticated
   useEffect(() => {
-    if (session?.provider_token && !hasInitialSync && !needsReauth) {
+    if (session?.provider_token && !hasInitialSync) {
       // Automatically try to sync to detect permission issues (only once)
       syncGmail();
       setHasInitialSync(true); // Prevent repeated calls
     }
-  }, [session?.provider_token]); // Only depend on token presence
+  }, [session?.provider_token, hasInitialSync, syncGmail]); // Include dependencies
 
   const formatDate = (dateString: string) => {
     try {
