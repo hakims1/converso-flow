@@ -6,6 +6,7 @@ import { Mail, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const {
@@ -17,12 +18,37 @@ const Auth = () => {
   } = useToast();
   const navigate = useNavigate();
 
-  // Redirect authenticated users to dashboard
+  // Redirect authenticated users to dashboard and check Gmail permissions
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      // Check if user has Gmail permissions
+      const checkGmailPermissions = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.provider_token) {
+          // Check if we have the Gmail scope
+          const hasGmailScope = session.provider_refresh_token || 
+            (session.user.app_metadata?.provider === 'google' && 
+             session.user.user_metadata?.iss === 'https://accounts.google.com');
+          
+          if (hasGmailScope) {
+            navigate('/dashboard');
+          } else {
+            toast({
+              title: 'Additional Permissions Required',
+              description: 'Please sign in again and grant "View emails and settings" permission to access your Gmail.',
+              variant: 'destructive'
+            });
+            // Sign out the user so they can re-authenticate with proper permissions
+            await supabase.auth.signOut();
+          }
+        } else {
+          navigate('/dashboard');
+        }
+      };
+      
+      checkGmailPermissions();
     }
-  }, [user, navigate]);
+  }, [user, navigate, toast]);
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
