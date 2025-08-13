@@ -5,33 +5,32 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, RefreshCw, Clock, User, AlertTriangle } from 'lucide-react';
 import { useGmail } from '@/hooks/useGmail';
+import { useGmailPermissions } from '@/hooks/useGmailPermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
 
 const GmailSync = () => {
-  const { messages, loading, totalCount, needsReauth, syncGmail } = useGmail();
+  const { messages, loading, totalCount, syncGmail } = useGmail();
+  const gmailPermissions = useGmailPermissions();
   const { session, signInWithGoogle } = useAuth();
   const [hasInitialSync, setHasInitialSync] = useState(false);
   
-  // Check if user has Gmail permissions
-  // We can't reliably detect Gmail permissions from token presence alone
-  // We need to try calling the Gmail API to know for sure
-  const hasGmailPermissions = session?.provider_token && !needsReauth;
-  const showReauthButton = !session?.provider_token || needsReauth;
+  // Use centralized permission checking
+  const showReauthButton = gmailPermissions.needsReauth;
 
   const handleSync = async () => {
     await syncGmail();
     setHasInitialSync(true);
   };
 
-  // Auto-check Gmail permissions on component mount if user is authenticated
+  // Auto-sync when permissions are available
   useEffect(() => {
-    if (session?.provider_token && !hasInitialSync) {
-      // Automatically try to sync to detect permission issues (only once)
+    if (gmailPermissions.hasPermissions && !hasInitialSync && !loading) {
+      // Automatically sync when permissions are confirmed (only once)
       syncGmail();
-      setHasInitialSync(true); // Prevent repeated calls
+      setHasInitialSync(true);
     }
-  }, [session?.provider_token, hasInitialSync, syncGmail]); // Include dependencies
+  }, [gmailPermissions.hasPermissions, hasInitialSync, loading, syncGmail]);
 
   const formatDate = (dateString: string) => {
     try {
@@ -59,7 +58,7 @@ const GmailSync = () => {
             <Alert className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                {needsReauth 
+                {gmailPermissions.needsReauth && session?.provider_token
                   ? 'Gmail read permissions are missing or expired. Click "Re-authorize Gmail Access" below to grant the necessary permissions for email syncing.'
                   : 'Gmail permissions are required to sync your emails and get AI insights. Click "Authorize Gmail Access" below to connect your Gmail account.'
                 }
@@ -75,7 +74,7 @@ const GmailSync = () => {
                   className="flex items-center gap-2"
                 >
                   <Mail className="h-4 w-4" />
-                  {needsReauth ? 'Re-authorize Gmail Access' : 'Authorize Gmail Access'}
+                  {gmailPermissions.needsReauth && session?.provider_token ? 'Re-authorize Gmail Access' : 'Authorize Gmail Access'}
                 </Button>
               ) : (
                 <Button
