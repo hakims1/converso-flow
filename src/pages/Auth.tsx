@@ -11,7 +11,8 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const {
     signInWithGoogle,
-    user
+    user,
+    session
   } = useAuth();
   const {
     toast
@@ -20,35 +21,32 @@ const Auth = () => {
 
   // Redirect authenticated users to dashboard and check Gmail permissions
   useEffect(() => {
-    if (user) {
-      // Check if user has Gmail permissions
+    if (user && session) {
+      // Check if user has Gmail permissions by looking for the Gmail scope
       const checkGmailPermissions = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.provider_token) {
-          // Check if we have the Gmail scope
-          const hasGmailScope = session.provider_refresh_token || 
-            (session.user.app_metadata?.provider === 'google' && 
-             session.user.user_metadata?.iss === 'https://accounts.google.com');
-          
-          if (hasGmailScope) {
-            navigate('/dashboard');
-          } else {
-            toast({
-              title: 'Additional Permissions Required',
-              description: 'Please sign in again and grant "View emails and settings" permission to access your Gmail.',
-              variant: 'destructive'
-            });
-            // Sign out the user so they can re-authenticate with proper permissions
-            await supabase.auth.signOut();
-          }
-        } else {
+        console.log('Checking Gmail permissions for user:', user.email);
+        console.log('Session provider_token:', !!session.provider_token);
+        console.log('Session provider_refresh_token:', !!session.provider_refresh_token);
+        
+        // For Google OAuth, we should have a provider_token
+        if (session.provider_token || session.provider_refresh_token) {
+          console.log('Gmail permissions found, redirecting to dashboard');
           navigate('/dashboard');
+        } else {
+          console.log('No Gmail permissions found');
+          toast({
+            title: 'Gmail Access Required',
+            description: 'Please sign in again and grant "View emails and settings" permission to access your Gmail.',
+            variant: 'destructive'
+          });
+          // Sign out the user so they can re-authenticate with proper permissions
+          await supabase.auth.signOut();
         }
       };
       
       checkGmailPermissions();
     }
-  }, [user, navigate, toast]);
+  }, [user, session, navigate, toast]);
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {

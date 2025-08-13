@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         redirectTo: redirectUrl,
         queryParams: {
           access_type: 'offline',
-          prompt: 'consent',
+          prompt: 'select_account consent',
         },
         scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly'
       }
