@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGmailPermissions } from '@/hooks/useGmailPermissions';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPermissionStatus, setShowPermissionStatus] = useState(false);
@@ -36,31 +37,51 @@ const Auth = () => {
       // Show permission status for authenticated users
       setShowPermissionStatus(true);
       
-      // If we have Gmail permissions, redirect to dashboard
-      if (gmailPermissions.hasPermissions && !gmailPermissions.isChecking) {
-        console.log('Gmail permissions confirmed, redirecting to dashboard');
-        navigate('/dashboard');
+      // Only auto-check permissions if we have a provider token
+      if (session.provider_token) {
+        gmailPermissions.checkPermissions().then(() => {
+          // If we have Gmail permissions, redirect to dashboard
+          if (gmailPermissions.hasPermissions && !gmailPermissions.isChecking) {
+            console.log('Gmail permissions confirmed, redirecting to dashboard');
+            navigate('/dashboard');
+          }
+        });
+      } else {
+        // No provider token means we need re-auth
+        console.log('No provider token, needs re-auth');
       }
     }
-  }, [user, session, gmailPermissions.hasPermissions, gmailPermissions.isChecking, navigate]);
+  }, [user, session, navigate]);
 
-  // Handle OAuth callback - wait for session to be fully established
+  // Handle OAuth callback - force session refresh and check permissions
   useEffect(() => {
     const handleAuthCallback = async () => {
-      // Check if this is an OAuth callback with a code parameter
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('code') && user && session) {
-        console.log('OAuth callback detected, waiting for session to stabilize...');
-        // Wait a moment for the session to be established with provider tokens
-        setTimeout(() => {
-          console.log('Checking permissions after OAuth callback');
-          gmailPermissions.checkPermissions();
-        }, 2000);
+        console.log('OAuth callback detected, forcing session refresh...');
+        
+        // Force a complete session refresh
+        await supabase.auth.refreshSession();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get the fresh session and check for provider token
+        const { data: sessionData } = await supabase.auth.getSession();
+        const freshSession = sessionData?.session;
+        
+        console.log('Fresh session after OAuth:', {
+          hasProviderToken: !!freshSession?.provider_token,
+          providerTokenPreview: freshSession?.provider_token?.substring(0, 10)
+        });
+        
+        // Check permissions with the fresh session
+        if (freshSession?.provider_token) {
+          await gmailPermissions.checkPermissions();
+        }
       }
     };
 
     handleAuthCallback();
-  }, [user, session, gmailPermissions.checkPermissions]);
+  }, [user, session]);
 
   // Recheck permissions on window focus/visibility (useful after OAuth)
   useEffect(() => {

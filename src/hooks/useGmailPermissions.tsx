@@ -111,12 +111,12 @@ export const useGmailPermissions = () => {
     }
   };
 
-  // Auto-check permissions when session/access token changes
-  useEffect(() => {
-    if (session) {
-      checkPermissions();
-    }
-  }, [session?.access_token]);
+  // Only check permissions manually - no auto-checking
+  // useEffect(() => {
+  //   if (session) {
+  //     checkPermissions();
+  //   }
+  // }, [session?.access_token]);
 
   return {
     ...status,
