@@ -44,6 +44,24 @@ const Auth = () => {
     }
   }, [user, session, gmailPermissions.hasPermissions, gmailPermissions.isChecking, navigate]);
 
+  // Handle OAuth callback - wait for session to be fully established
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      // Check if this is an OAuth callback with a code parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('code') && user && session) {
+        console.log('OAuth callback detected, waiting for session to stabilize...');
+        // Wait a moment for the session to be established with provider tokens
+        setTimeout(() => {
+          console.log('Checking permissions after OAuth callback');
+          gmailPermissions.checkPermissions();
+        }, 2000);
+      }
+    };
+
+    handleAuthCallback();
+  }, [user, session, gmailPermissions.checkPermissions]);
+
   // Recheck permissions on window focus/visibility (useful after OAuth)
   useEffect(() => {
     const onFocus = () => {

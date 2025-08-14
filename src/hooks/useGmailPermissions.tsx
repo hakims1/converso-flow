@@ -23,12 +23,26 @@ export const useGmailPermissions = () => {
 
     try {
       // Always refresh and fetch the freshest session in case we just re-authorized
-      try { await supabase.auth.refreshSession(); } catch (e) { console.warn('refreshSession failed (non-fatal):', e); }
+      try { 
+        await supabase.auth.refreshSession(); 
+      } catch (e) { 
+        console.warn('refreshSession failed (non-fatal):', e); 
+      }
+      
+      // Wait a bit for the refresh to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error('Failed to get session:', sessionError);
       }
       const freshSession = sessionData?.session || session;
+
+      console.log('Fresh session data:', {
+        hasAccessToken: !!freshSession?.access_token,
+        hasProviderToken: !!freshSession?.provider_token,
+        timestamp: new Date().toISOString()
+      });
 
       if (!freshSession?.access_token) {
         setStatus({
@@ -40,10 +54,21 @@ export const useGmailPermissions = () => {
         return;
       }
 
+      if (!freshSession?.provider_token) {
+        console.warn('No provider token found in session');
+        setStatus({
+          hasPermissions: false,
+          isChecking: false,
+          needsReauth: true,
+          error: 'Google authentication required. Please re-authorize with Gmail permissions.'
+        });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
         headers: {
           Authorization: `Bearer ${freshSession.access_token}`,
-          'x-google-access-token': freshSession.provider_token ?? '',
+          'x-google-access-token': freshSession.provider_token,
         },
       });
 
