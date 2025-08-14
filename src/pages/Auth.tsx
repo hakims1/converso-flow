@@ -23,10 +23,10 @@ const Auth = () => {
   } = useToast();
   const navigate = useNavigate();
 
-  // Handle redirect logic with Gmail permission checking
+  // Show permission status for authenticated users  
   useEffect(() => {
     if (user && session) {
-      console.log('User authenticated, checking Gmail permissions...');
+      console.log('User authenticated');
       console.log('User:', user.email);
       console.log('Session data:', {
         access_token: !!session.access_token,
@@ -34,24 +34,15 @@ const Auth = () => {
         provider_refresh_token: !!session.provider_refresh_token
       });
       
-      // Show permission status for authenticated users
       setShowPermissionStatus(true);
       
-      // Only auto-check permissions if we have a provider token
-      if (session.provider_token) {
-        gmailPermissions.checkPermissions().then(() => {
-          // If we have Gmail permissions, redirect to dashboard
-          if (gmailPermissions.hasPermissions && !gmailPermissions.isChecking) {
-            console.log('Gmail permissions confirmed, redirecting to dashboard');
-            navigate('/dashboard');
-          }
-        });
-      } else {
-        // No provider token means we need re-auth
-        console.log('No provider token, needs re-auth');
+      // If we already have Gmail permissions, redirect to dashboard
+      if (gmailPermissions.hasPermissions) {
+        console.log('Gmail permissions confirmed, redirecting to dashboard');
+        navigate('/dashboard');
       }
     }
-  }, [user, session, navigate]);
+  }, [user, session, gmailPermissions.hasPermissions, navigate]);
 
   // Handle OAuth callback - force session refresh and check permissions
   useEffect(() => {
@@ -83,20 +74,7 @@ const Auth = () => {
     handleAuthCallback();
   }, [user, session]);
 
-  // Recheck permissions on window focus/visibility (useful after OAuth)
-  useEffect(() => {
-    const onFocus = () => {
-      if (gmailPermissions.needsReauth) {
-        gmailPermissions.checkPermissions();
-      }
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
-    };
-  }, [gmailPermissions.needsReauth]);
+  // Remove auto-checking on window focus - only manual checks allowed
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
