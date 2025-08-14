@@ -51,11 +51,11 @@ const Auth = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('code') && user && session) {
         console.log('OAuth callback detected, waiting for session to stabilize...');
-        // Wait longer for the session to be established with provider tokens
+        // Wait a moment for the session to be established with provider tokens
         setTimeout(() => {
           console.log('Checking permissions after OAuth callback');
           gmailPermissions.checkPermissions();
-        }, 3000); // Increased wait time
+        }, 2000);
       }
     };
 
