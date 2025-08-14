@@ -45,6 +45,10 @@ const Auth = () => {
         console.log('🎉 Gmail permissions confirmed, redirecting to dashboard');
         localStorage.removeItem('gmail_oauth_attempted'); // Clean up
         navigate('/dashboard');
+      } else if (hasAttemptedOAuth && !gmailPermissions.isChecking) {
+        // If user has attempted OAuth but doesn't have permissions, trigger a check
+        console.log('🔍 User has attempted OAuth, checking permissions...');
+        gmailPermissions.checkPermissions();
       }
     } else {
       setShowPermissionStatus(false);
