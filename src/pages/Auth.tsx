@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPermissionStatus, setShowPermissionStatus] = useState(false);
+  const [isFirstTimeUser, setIsFirstTimeUser] = useState(true);
   const {
     signInWithGoogle,
     user,
@@ -23,12 +24,11 @@ const Auth = () => {
   } = useToast();
   const navigate = useNavigate();
 
-  // Show permission status for authenticated users  
+  // Track user state and redirect when permissions are granted
   useEffect(() => {
     if (user && session) {
-      console.log('User authenticated');
-      console.log('User:', user.email);
-      console.log('Session data:', {
+      console.log('✅ User authenticated:', user.email);
+      console.log('📋 Session data:', {
         access_token: !!session.access_token,
         provider_token: !!session.provider_token,
         provider_refresh_token: !!session.provider_refresh_token
@@ -36,50 +36,99 @@ const Auth = () => {
       
       setShowPermissionStatus(true);
       
-      // If we already have Gmail permissions, redirect to dashboard
+      // Check if this user has previously attempted OAuth
+      const hasAttemptedOAuth = localStorage.getItem('gmail_oauth_attempted') === 'true';
+      setIsFirstTimeUser(!hasAttemptedOAuth);
+      
+      // If we already have Gmail permissions, redirect to dashboard immediately
       if (gmailPermissions.hasPermissions) {
-        console.log('Gmail permissions confirmed, redirecting to dashboard');
+        console.log('🎉 Gmail permissions confirmed, redirecting to dashboard');
+        localStorage.removeItem('gmail_oauth_attempted'); // Clean up
         navigate('/dashboard');
       }
+    } else {
+      setShowPermissionStatus(false);
+      setIsFirstTimeUser(true);
     }
   }, [user, session, gmailPermissions.hasPermissions, navigate]);
 
-  // Handle OAuth callback - force session refresh and check permissions
+  // Handle OAuth callback with robust session refresh
   useEffect(() => {
     const handleAuthCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('code') && user && session) {
-        console.log('OAuth callback detected, forcing session refresh...');
+      const isOAuthCallback = urlParams.has('code') || localStorage.getItem('gmail_oauth_pending') === 'true';
+      
+      if (isOAuthCallback && user && session) {
+        console.log('🔄 OAuth callback detected, processing...');
+        localStorage.setItem('gmail_oauth_attempted', 'true');
+        localStorage.removeItem('gmail_oauth_pending');
         
-        // Force a complete session refresh
-        await supabase.auth.refreshSession();
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Get the fresh session and check for provider token
-        const { data: sessionData } = await supabase.auth.getSession();
-        const freshSession = sessionData?.session;
-        
-        console.log('Fresh session after OAuth:', {
-          hasProviderToken: !!freshSession?.provider_token,
-          providerTokenPreview: freshSession?.provider_token?.substring(0, 10)
-        });
-        
-        // Check permissions with the fresh session
-        if (freshSession?.provider_token) {
-          await gmailPermissions.checkPermissions();
+        try {
+          // Multiple session refresh attempts for robustness
+          console.log('🔃 Refreshing session (attempt 1)...');
+          await supabase.auth.refreshSession();
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Second refresh attempt
+          console.log('🔃 Refreshing session (attempt 2)...');
+          await supabase.auth.refreshSession();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Get the fresh session
+          const { data: sessionData } = await supabase.auth.getSession();
+          const freshSession = sessionData?.session;
+          
+          console.log('📊 Fresh session after OAuth:', {
+            hasProviderToken: !!freshSession?.provider_token,
+            tokenLength: freshSession?.provider_token?.length || 0,
+            tokenPreview: freshSession?.provider_token?.substring(0, 20) + '...' || 'none'
+          });
+          
+          // Check permissions if we have a provider token
+          if (freshSession?.provider_token) {
+            console.log('🔍 Checking Gmail permissions with fresh token...');
+            await gmailPermissions.checkPermissions();
+            
+            // Explicitly check the result after permission check
+            setTimeout(() => {
+              if (gmailPermissions.hasPermissions) {
+                console.log('🎯 Permission check successful, should redirect now');
+                navigate('/dashboard');
+              } else {
+                console.log('❌ Permission check failed, staying on auth page');
+              }
+            }, 1000);
+          } else {
+            console.log('⚠️ No provider token found after OAuth - permissions may be incomplete');
+          }
+          
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (error) {
+          console.error('❌ OAuth callback error:', error);
+          toast({
+            title: 'OAuth Error',
+            description: 'There was an issue processing your authorization. Please try again.',
+            variant: 'destructive'
+          });
         }
       }
     };
 
     handleAuthCallback();
-  }, [user, session]);
+  }, [user, session, gmailPermissions, navigate, toast]);
 
-  // Remove auto-checking on window focus - only manual checks allowed
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
+      // Mark OAuth as pending before redirect
+      localStorage.setItem('gmail_oauth_pending', 'true');
+      console.log('🚀 Initiating Google Sign In...');
+      
       await signInWithGoogle();
     } catch (error: any) {
+      console.error('❌ Google Sign In error:', error);
+      localStorage.removeItem('gmail_oauth_pending');
       toast({
         title: 'Error',
         description: error.message || 'Failed to sign in with Google',
@@ -87,6 +136,25 @@ const Auth = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCheckPermissions = async () => {
+    console.log('🔍 Manual permission check triggered');
+    try {
+      await gmailPermissions.checkPermissions();
+      
+      // Check result after a brief delay
+      setTimeout(() => {
+        if (gmailPermissions.hasPermissions) {
+          console.log('✅ Manual permission check successful');
+          navigate('/dashboard');
+        } else {
+          console.log('❌ Manual permission check failed');
+        }
+      }, 500);
+    } catch (error) {
+      console.error('❌ Manual permission check error:', error);
     }
   };
   return <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -154,12 +222,12 @@ const Auth = () => {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                {user && gmailPermissions.needsReauth ? 'Grant Gmail Access' : 'Continue with Google'}
+                {user && gmailPermissions.needsReauth ? 'Grant Gmail Access' : (isFirstTimeUser ? 'Continue with Google' : 'Re-authorize with Google')}
               </Button>
-              {gmailPermissions.needsReauth && (
+              {gmailPermissions.needsReauth && user && (
                 <Button
                   variant="secondary"
-                  onClick={gmailPermissions.checkPermissions}
+                  onClick={handleCheckPermissions}
                   disabled={gmailPermissions.isChecking}
                   className="w-full"
                   size="sm"
