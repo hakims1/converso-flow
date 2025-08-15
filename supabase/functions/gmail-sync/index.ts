@@ -45,29 +45,77 @@ Deno.serve(async (req) => {
 
     console.log('Authenticated user:', user.id)
 
-    // Determine Google access token (prefer explicit token from client)
-    const explicitToken = req.headers.get('x-google-access-token')
-    let bodyProviderToken: string | null = null
-    try {
-      const body = await req.json()
-      bodyProviderToken = body?.provider_token || body?.providerToken || null
-    } catch {
-      // no body provided or not JSON
-    }
-
-    let accessToken = explicitToken || bodyProviderToken || null
-
+    // Get Google access token from request
+    const body = await req.json();
+    let accessToken = body.access_token;
+    const testOnly = body.test_only === true;
+    
+    // Fallback: try to get from headers if not in body
     if (!accessToken) {
-      // Fallback to session (may not contain provider_token in Edge env)
-      const { data: session } = await supabase.auth.getSession()
-      accessToken = session.session?.provider_token || null
+      const authHeader = req.headers.get('x-google-access-token');
+      if (authHeader) {
+        accessToken = authHeader;
+      }
     }
 
     if (!accessToken) {
-      throw new Error('No Google access token found. Please re-authenticate with Google.')
+      console.error('No Google access token provided');
+      return new Response(
+        JSON.stringify({ error: 'Google access token required' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
     }
 
-    console.log('Found access token, fetching Gmail messages...')
+    console.log(`${testOnly ? 'Testing' : 'Fetching'} Gmail access for user:`, user.id);
+
+    // Test Gmail API access with a simple profile request first
+    const profileResponse = await fetch(
+      'https://www.googleapis.com/gmail/v1/users/me/profile',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!profileResponse.ok) {
+      const errorText = await profileResponse.text();
+      console.error('Gmail profile API error:', profileResponse.status, errorText);
+      
+      let errorMessage = `Gmail API access denied (${profileResponse.status}).`;
+      
+      if (profileResponse.status === 403) {
+        errorMessage += ' The user does not have sufficient permissions to access Gmail data. Please re-authorize with Gmail permissions.';
+      } else if (profileResponse.status === 401) {
+        errorMessage += ' The access token is invalid or expired. Please re-authenticate.';
+      } else {
+        errorMessage += ` Error: ${errorText}`;
+      }
+      
+      return new Response(
+        JSON.stringify({ error: errorMessage }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: profileResponse.status,
+        }
+      );
+    }
+
+    // If this is just a test, return success
+    if (testOnly) {
+      console.log('✅ Gmail API access test successful');
+      return new Response(
+        JSON.stringify({ success: true, message: 'Gmail API access verified' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
 
     // Fetch recent emails from Gmail API
     const gmailResponse = await fetch(
@@ -78,28 +126,25 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
         },
       }
-    )
+    );
 
     if (!gmailResponse.ok) {
-      const errorText = await gmailResponse.text()
-      console.error('Gmail API error:', errorText)
+      const errorText = await gmailResponse.text();
+      console.error('Gmail messages API error:', gmailResponse.status, errorText);
       
-      // Check if it's a permissions error
       if (gmailResponse.status === 403) {
         return new Response(
-          JSON.stringify({
-            error: 'GMAIL_PERMISSIONS_REQUIRED',
-            message: 'Gmail read permissions are required. Please re-authenticate to grant access.',
-            success: false
+          JSON.stringify({ 
+            error: 'Gmail API access denied. The user does not have sufficient permissions to access Gmail data.' 
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 403,
           }
-        )
+        );
       }
       
-      throw new Error(`Gmail API error: ${gmailResponse.status} ${errorText}`)
+      throw new Error(`Gmail API error: ${gmailResponse.status} ${errorText}`);
     }
 
     const gmailData = await gmailResponse.json()

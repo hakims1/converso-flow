@@ -19,95 +19,79 @@ export const useGmailPermissions = () => {
   const { session } = useAuth();
 
   const checkPermissions = async () => {
-    setStatus(prev => ({ ...prev, isChecking: true }));
-
+    setStatus({ hasPermissions: false, isChecking: true, needsReauth: false });
+    
     try {
-      // Always refresh and fetch the freshest session in case we just re-authorized
-      try { 
-        await supabase.auth.refreshSession(); 
-      } catch (e) { 
-        console.warn('refreshSession failed (non-fatal):', e); 
-      }
+      console.log('🔍 Checking Gmail permissions...');
       
-      // Wait a bit for the refresh to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Get current session without forcing refresh initially
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
       
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error('Failed to get session:', sessionError);
-      }
-      const freshSession = sessionData?.session || session;
-
-      console.log('Fresh session data:', {
-        hasAccessToken: !!freshSession?.access_token,
-        hasProviderToken: !!freshSession?.provider_token,
-        timestamp: new Date().toISOString()
-      });
-
-      if (!freshSession?.access_token) {
-        setStatus({
-          hasPermissions: false,
-          isChecking: false,
-          needsReauth: true,
-          error: 'Not authenticated. Please sign in again.'
-        });
+      if (!currentSession?.access_token) {
+        console.log('❌ No access token available');
+        setStatus({ hasPermissions: false, isChecking: false, needsReauth: true });
         return;
       }
 
-      if (!freshSession?.provider_token) {
-        console.warn('No provider token found in session');
-        setStatus({
-          hasPermissions: false,
-          isChecking: false,
-          needsReauth: true,
-          error: 'Google authentication required. Please re-authorize with Gmail permissions.'
-        });
+      // Check if we have the provider_token (Google OAuth token)
+      if (!currentSession?.provider_token) {
+        console.log('❌ No provider token available - need OAuth');
+        setStatus({ hasPermissions: false, isChecking: false, needsReauth: true });
         return;
       }
 
+      console.log('📋 Testing Gmail API access with current tokens...');
+
+      // Test actual Gmail API access by calling our edge function
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
         headers: {
-          Authorization: `Bearer ${freshSession.access_token}`,
-          'x-google-access-token': freshSession.provider_token,
+          Authorization: `Bearer ${currentSession.access_token}`,
         },
+        body: { 
+          access_token: currentSession.provider_token,
+          test_only: true // Just test permissions, don't sync
+        }
       });
 
+      // Handle network/function errors
       if (error) {
-        if (error.message?.includes('GMAIL_PERMISSIONS_REQUIRED') ||
-            (error.details && error.details.includes('403'))) {
-          setStatus({
-            hasPermissions: false,
-            isChecking: false,
-            needsReauth: true,
-            error: 'Gmail permissions required'
-          });
-          return;
+        console.error('❌ Gmail API test failed with error:', error);
+        
+        // If it's a 403 or scope error, we need re-auth
+        if (error.message?.includes('403') || error.message?.includes('insufficient') || 
+            error.message?.includes('scope') || error.message?.includes('permission')) {
+          console.log('🔄 Scope/permission error detected, need re-auth');
+          setStatus({ hasPermissions: false, isChecking: false, needsReauth: true });
+        } else {
+          // Other errors (network, etc.)
+          setStatus({ hasPermissions: false, isChecking: false, needsReauth: false, error: error.message });
         }
-
-        setStatus({
-          hasPermissions: false,
-          isChecking: false,
-          needsReauth: true,
-          error: error.message || 'Permission check failed'
-        });
         return;
       }
 
-      // If we got here, permissions are working
-      setStatus({
-        hasPermissions: true,
-        isChecking: false,
-        needsReauth: false
-      });
+      // Handle response data errors
+      if (data?.error) {
+        console.error('❌ Gmail sync function returned error:', data.error);
+        
+        // Check for permission/scope related errors
+        if (data.error.includes('403') || data.error.includes('insufficient') || 
+            data.error.includes('scope') || data.error.includes('permission') ||
+            data.error.includes('The user does not have sufficient permissions')) {
+          console.log('🔄 Permission error in response, need re-auth');
+          setStatus({ hasPermissions: false, isChecking: false, needsReauth: true });
+        } else {
+          setStatus({ hasPermissions: false, isChecking: false, needsReauth: false, error: data.error });
+        }
+        return;
+      }
 
-    } catch (error: any) {
-      console.error('Permission check error:', error);
-      setStatus({
-        hasPermissions: false,
-        isChecking: false,
-        needsReauth: true,
-        error: error.message || 'Permission check failed'
-      });
+      // Success - we can access Gmail API
+      console.log('✅ Gmail permissions verified successfully');
+      setStatus({ hasPermissions: true, isChecking: false, needsReauth: false });
+      
+    } catch (error) {
+      console.error('❌ Permission check caught exception:', error);
+      setStatus({ hasPermissions: false, isChecking: false, needsReauth: true });
     }
   };
 

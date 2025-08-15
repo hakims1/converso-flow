@@ -70,85 +70,70 @@ const Auth = () => {
   useEffect(() => {
     const handleAuthCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const isOAuthCallback = urlParams.has('code') || localStorage.getItem('gmail_oauth_pending') === 'true';
-      const wasReauthForPermissions = localStorage.getItem('gmail_reauth_for_permissions') === 'true';
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
       
-      if (isOAuthCallback && user && session) {
-        console.log('🔄 OAuth callback detected, processing...', { wasReauthForPermissions });
-        localStorage.setItem('gmail_oauth_attempted', 'true');
-        localStorage.removeItem('gmail_oauth_pending');
-        localStorage.removeItem('gmail_reauth_for_permissions');
+      if (code && state) {
+        console.log('🔗 OAuth callback detected');
         
         try {
-          // Wait longer for session to stabilize after OAuth
-          console.log('⏳ Waiting for session to stabilize...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Wait a moment for Supabase to process the OAuth callback
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
-          // Get the current session (should have been updated by onAuthStateChange)
-          const { data: sessionData } = await supabase.auth.getSession();
-          const currentSession = sessionData?.session;
+          // Get the latest session after OAuth
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
           
-          console.log('📊 Current session after OAuth callback:', {
-            hasProviderToken: !!currentSession?.provider_token,
-            tokenLength: currentSession?.provider_token?.length || 0,
-            wasReauth: wasReauthForPermissions
-          });
-          
-          // For re-auth scenarios, we expect to have Gmail permissions now
-          if (wasReauthForPermissions && currentSession?.provider_token) {
-            console.log('🔍 Re-auth completed, checking Gmail permissions...');
+          if (currentSession?.provider_token) {
+            console.log('✅ OAuth session established with provider token');
             
-            // Check permissions - the separate useEffect will handle redirection
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Clear OAuth attempt flag since we got a valid session
+            localStorage.removeItem('gmail_oauth_attempted');
+            
+            console.log('🔍 Testing Gmail permissions after OAuth...');
+            // Always check permissions after OAuth to validate scopes
             await gmailPermissions.checkPermissions();
-          } else if (currentSession?.provider_token) {
-            console.log('🔍 First-time auth, checking permissions...');
-            await gmailPermissions.checkPermissions();
+            
           } else {
-            console.log('⚠️ No provider token found after OAuth');
+            console.log('❌ OAuth callback but no provider token found');
+            localStorage.removeItem('gmail_oauth_attempted');
+            localStorage.removeItem('gmail_reauth_for_permissions');
           }
-          
-          // Clean URL
-          window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
           console.error('❌ OAuth callback error:', error);
-          toast({
-            title: 'OAuth Error',
-            description: 'There was an issue processing your authorization. Please try again.',
-            variant: 'destructive'
-          });
+          localStorage.removeItem('gmail_oauth_attempted');
+          localStorage.removeItem('gmail_reauth_for_permissions');
         }
       }
     };
 
     handleAuthCallback();
-  }, [user, session, navigate, toast]);
+  }, [gmailPermissions]);
 
   const handleGoogleSignIn = async () => {
-    setIsLoading(true);
+    console.log('🚀 Google sign-in initiated');
+    
     try {
-      // Determine if this is a re-auth for Gmail permissions
-      const isReauth = user && gmailPermissions.needsReauth;
+      // Always mark that we're attempting OAuth
+      localStorage.setItem('gmail_oauth_attempted', 'true');
       
-      // Mark OAuth as pending before redirect
-      localStorage.setItem('gmail_oauth_pending', 'true');
-      if (isReauth) {
+      // If user exists but permissions failed, force re-auth to get new scopes
+      if (user && !gmailPermissions.hasPermissions) {
+        console.log('🔄 Re-authentication for Gmail permissions');
         localStorage.setItem('gmail_reauth_for_permissions', 'true');
+        await signInWithGoogle(true); // Force re-auth with fresh consent
+      } else {
+        // First-time sign-in or no existing user
+        console.log('👋 Initial Google sign-in');
+        await signInWithGoogle(false);
       }
-      
-      console.log('🚀 Initiating Google Sign In...', { isReauth });
-      
-      await signInWithGoogle(isReauth);
-    } catch (error: any) {
-      console.error('❌ Google Sign In error:', error);
-      localStorage.removeItem('gmail_oauth_pending');
+    } catch (error) {
+      console.error('❌ Google sign-in error:', error);
+      // Clean up flags on error
+      localStorage.removeItem('gmail_oauth_attempted');
       localStorage.removeItem('gmail_reauth_for_permissions');
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to sign in with Google',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
