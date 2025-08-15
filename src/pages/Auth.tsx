@@ -13,6 +13,7 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPermissionStatus, setShowPermissionStatus] = useState(false);
   const [isFirstTimeUser, setIsFirstTimeUser] = useState(true);
+  const [hasTriggeredInitialCheck, setHasTriggeredInitialCheck] = useState(false);
   const {
     signInWithGoogle,
     user,
@@ -45,16 +46,17 @@ const Auth = () => {
         console.log('🎉 Gmail permissions confirmed, redirecting to dashboard');
         localStorage.removeItem('gmail_oauth_attempted'); // Clean up
         navigate('/dashboard');
-      } else if (hasAttemptedOAuth && !gmailPermissions.isChecking && !gmailPermissions.hasPermissions) {
-        // If user has attempted OAuth but doesn't have permissions and we're not currently checking, trigger a check
+      } else if (hasAttemptedOAuth && !hasTriggeredInitialCheck && !gmailPermissions.hasPermissions) {
+        // If user has attempted OAuth but doesn't have permissions and we haven't checked yet, trigger a check
         console.log('🔍 User previously attempted OAuth, checking permissions...');
+        setHasTriggeredInitialCheck(true);
         gmailPermissions.checkPermissions();
       }
     } else {
       setShowPermissionStatus(false);
       setIsFirstTimeUser(true);
     }
-  }, [user, session, gmailPermissions.hasPermissions, gmailPermissions.isChecking, navigate]);
+  }, [user, session, gmailPermissions.hasPermissions, navigate, hasTriggeredInitialCheck]);
 
   // Separate effect to react to permission changes and redirect
   useEffect(() => {
