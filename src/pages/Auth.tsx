@@ -54,7 +54,17 @@ const Auth = () => {
       setShowPermissionStatus(false);
       setIsFirstTimeUser(true);
     }
-  }, [user, session, gmailPermissions.hasPermissions, navigate]);
+  }, [user, session, gmailPermissions.hasPermissions, gmailPermissions.isChecking, navigate]);
+
+  // Separate effect to react to permission changes and redirect
+  useEffect(() => {
+    if (gmailPermissions.hasPermissions && user && session) {
+      console.log('🎯 Gmail permissions granted, redirecting to dashboard');
+      localStorage.removeItem('gmail_oauth_attempted');
+      localStorage.removeItem('gmail_reauth_for_permissions');
+      navigate('/dashboard');
+    }
+  }, [gmailPermissions.hasPermissions, user, session, navigate]);
 
   // Handle OAuth callback with improved session handling
   useEffect(() => {
@@ -88,22 +98,8 @@ const Auth = () => {
           if (wasReauthForPermissions && currentSession?.provider_token) {
             console.log('🔍 Re-auth completed, checking Gmail permissions...');
             
-            // Check permissions and wait for result
+            // Check permissions - the separate useEffect will handle redirection
             await gmailPermissions.checkPermissions();
-            
-            // Wait a bit for state to update, then check result
-            setTimeout(() => {
-              console.log('📋 Permission check result:', {
-                hasPermissions: gmailPermissions.hasPermissions,
-                needsReauth: gmailPermissions.needsReauth,
-                isChecking: gmailPermissions.isChecking
-              });
-              
-              if (gmailPermissions.hasPermissions) {
-                console.log('🎯 Gmail permissions verified after re-auth, redirecting!');
-                navigate('/dashboard');
-              }
-            }, 1500);
           } else if (currentSession?.provider_token) {
             console.log('🔍 First-time auth, checking permissions...');
             await gmailPermissions.checkPermissions();
@@ -160,16 +156,7 @@ const Auth = () => {
     console.log('🔍 Manual permission check triggered');
     try {
       await gmailPermissions.checkPermissions();
-      
-      // Check result after a brief delay
-      setTimeout(() => {
-        if (gmailPermissions.hasPermissions) {
-          console.log('✅ Manual permission check successful');
-          navigate('/dashboard');
-        } else {
-          console.log('❌ Manual permission check failed');
-        }
-      }, 500);
+      // The separate useEffect will handle redirection when permissions are granted
     } catch (error) {
       console.error('❌ Manual permission check error:', error);
     }
