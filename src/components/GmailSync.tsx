@@ -86,7 +86,7 @@ const GmailSync = () => {
               {showReauthButton ? (
                 <>
                   <Button
-                    onClick={signInWithGoogle}
+                    onClick={() => signInWithGoogle()}
                     className="flex items-center gap-2"
                   >
                     <Mail className="h-4 w-4" />

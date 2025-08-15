@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (forceReauth?: boolean) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -51,15 +51,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (forceReauth = false) => {
     const redirectUrl = `${window.location.origin}/auth`;
+    
+    // If forcing reauth (for Gmail permissions), sign out first to ensure fresh OAuth
+    if (forceReauth) {
+      await supabase.auth.signOut({ scope: 'local' });
+    }
+    
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
         queryParams: {
           access_type: 'offline',
-          prompt: 'consent',
+          prompt: forceReauth ? 'consent' : 'select_account',
         },
         scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly'
       }
