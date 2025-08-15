@@ -45,9 +45,9 @@ const Auth = () => {
         console.log('🎉 Gmail permissions confirmed, redirecting to dashboard');
         localStorage.removeItem('gmail_oauth_attempted'); // Clean up
         navigate('/dashboard');
-      } else if (hasAttemptedOAuth && !gmailPermissions.isChecking) {
-        // If user has attempted OAuth but doesn't have permissions, trigger a check
-        console.log('🔍 User has attempted OAuth, checking permissions...');
+      } else if (hasAttemptedOAuth && !gmailPermissions.isChecking && !gmailPermissions.hasPermissions) {
+        // If user has attempted OAuth but doesn't have permissions and we're not currently checking, trigger a check
+        console.log('🔍 User previously attempted OAuth, checking permissions...');
         gmailPermissions.checkPermissions();
       }
     } else {
@@ -201,7 +201,7 @@ const Auth = () => {
             <div className="space-y-3">
               <Button 
                 onClick={handleGoogleSignIn} 
-                disabled={isLoading || gmailPermissions.isChecking} 
+                disabled={isLoading} 
                 className="w-full" 
                 size="lg"
               >
