@@ -6,43 +6,31 @@ import { Mail, MessageSquare, CheckSquare, TrendingUp, Clock, Zap } from "lucide
 export function Overview() {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground">
-            Welcome back! Here's what's happening with your emails.
+      {/* Hero Section */}
+      <div className="text-center space-y-8 py-12">
+        <div className="space-y-4">
+          <h1 className="text-4xl font-bold tracking-tight">Overview</h1>
+          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+            On the Free Plan, you can scan your last month's emails. This should be able to give you an idea of how helpful we can be
           </p>
         </div>
-        <Button className="gradient-primary text-white border-0">
-          <Mail className="mr-2 h-4 w-4" />
-          Connect Gmail
-        </Button>
-      </div>
-
-      {/* Status Card */}
-      <Card className="gradient-card shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Zap className="mr-2 h-5 w-5 text-primary-light" />
-            Get Started with Your Email Analysis
-          </CardTitle>
-          <CardDescription>
-            Connect your Gmail account to unlock powerful AI insights
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Badge variant="secondary" className="bg-primary-light/10 text-primary-light">
-              Free Plan
-            </Badge>
-            <span className="text-sm text-muted-foreground">10 conversations available</span>
-          </div>
-          <Button className="gradient-primary text-white border-0">
-            Connect Gmail Account
+        
+        <div className="space-y-6">
+          <Button 
+            size="lg" 
+            className="h-14 px-12 text-lg font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105"
+          >
+            <Zap className="mr-3 h-6 w-6" />
+            Uncover last month's email opportunities
           </Button>
-        </CardContent>
-      </Card>
+          
+          <div>
+            <button className="text-sm text-muted-foreground hover:text-foreground underline transition-colors">
+              Upgrade to process your entire email history
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
