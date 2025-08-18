@@ -2,29 +2,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, MessageSquare, CheckSquare, TrendingUp, Clock, Zap } from "lucide-react";
+import { ConversationsDashboard } from "@/components/ConversationsDashboard";
+
 export function Overview() {
-  return <div className="space-y-6">
-      {/* Hero Section */}
-      <div className="text-center space-y-8 py-12">
-        <div className="space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">Find the Money 
-Hiding in Your Inbox</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">On the Free Plan, you can scan your last month's emails. </p>
-        </div>
-        
-        <div className="space-y-6">
-          <Button size="lg" className="h-14 px-12 text-lg font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105">
-            <Zap className="mr-3 h-6 w-6" />
-            Uncover last month's email opportunities
-          </Button>
-          
-          <div>
-            <button className="text-sm text-muted-foreground hover:text-foreground underline transition-colors">
-              Upgrade to process your entire email history
-            </button>
-          </div>
-        </div>
-      </div>
+  return (
+    <div className="space-y-6">
+      {/* Conversations Dashboard */}
+      <ConversationsDashboard />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -36,9 +20,9 @@ Hiding in Your Inbox</h1>
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary-light">0</div>
+            <div className="text-2xl font-bold text-primary-light">6</div>
             <p className="text-xs text-muted-foreground">
-              Connect Gmail to see your conversations
+              Conversations analyzed this month
             </p>
           </CardContent>
         </Card>
@@ -51,9 +35,9 @@ Hiding in Your Inbox</h1>
             <CheckSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary-light">0</div>
+            <div className="text-2xl font-bold text-primary-light">3</div>
             <p className="text-xs text-muted-foreground">
-              AI will suggest action items
+              Follow-ups needed
             </p>
           </CardContent>
         </Card>
@@ -66,9 +50,9 @@ Hiding in Your Inbox</h1>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary-light">--</div>
+            <div className="text-2xl font-bold text-primary-light">2.3d</div>
             <p className="text-xs text-muted-foreground">
-              Analysis will show insights
+              Average response time
             </p>
           </CardContent>
         </Card>
@@ -81,9 +65,9 @@ Hiding in Your Inbox</h1>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary-light">--%</div>
+            <div className="text-2xl font-bold text-primary-light">85%</div>
             <p className="text-xs text-muted-foreground">
-              Track your email effectiveness
+              Response rate this month
             </p>
           </CardContent>
         </Card>
@@ -95,25 +79,22 @@ Hiding in Your Inbox</h1>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
             <CardDescription>
-              Common tasks to get you started
+              Common tasks to manage your conversations
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" className="w-full justify-start" disabled>
+            <Button variant="outline" className="w-full justify-start">
               <Mail className="mr-2 h-4 w-4" />
-              Analyze Recent Conversations
+              View All Conversations
             </Button>
-            <Button variant="outline" className="w-full justify-start" disabled>
+            <Button variant="outline" className="w-full justify-start">
               <CheckSquare className="mr-2 h-4 w-4" />
-              View Action Items
+              Review Action Items
             </Button>
-            <Button variant="outline" className="w-full justify-start" disabled>
+            <Button variant="outline" className="w-full justify-start">
               <TrendingUp className="mr-2 h-4 w-4" />
-              Check Analytics
+              View Analytics
             </Button>
-            <p className="text-xs text-muted-foreground">
-              Connect Gmail to enable these features
-            </p>
           </CardContent>
         </Card>
 
@@ -149,5 +130,6 @@ Hiding in Your Inbox</h1>
           </CardContent>
         </Card>
       </div>
-    </div>;
+    </div>
+  );
 }
