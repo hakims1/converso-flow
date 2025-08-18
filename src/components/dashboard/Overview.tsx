@@ -2,24 +2,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, MessageSquare, CheckSquare, TrendingUp, Clock, Zap } from "lucide-react";
-
 export function Overview() {
-  return (
-    <div className="space-y-6">
+  return <div className="space-y-6">
       {/* Hero Section */}
       <div className="text-center space-y-8 py-12">
         <div className="space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">Overview</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-            On the Free Plan, you can scan your last month's emails. This should be able to give you an idea of how helpful we can be
-          </p>
+          <h1 className="text-4xl font-bold tracking-tight">Find the Money 
+Hiding in Your Inbox</h1>
+          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">On the Free Plan, you can scan your last month's emails. </p>
         </div>
         
         <div className="space-y-6">
-          <Button 
-            size="lg" 
-            className="h-14 px-12 text-lg font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105"
-          >
+          <Button size="lg" className="h-14 px-12 text-lg font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105">
             <Zap className="mr-3 h-6 w-6" />
             Uncover last month's email opportunities
           </Button>
@@ -155,6 +149,5 @@ export function Overview() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </div>;
 }
