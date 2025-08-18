@@ -12,8 +12,21 @@ interface GmailMessage {
   snippet: string
   payload: {
     headers: Array<{ name: string; value: string }>
+    parts?: Array<{ body: { data?: string } }>
   }
   internalDate: string
+}
+
+interface GmailThread {
+  id: string
+  messages: GmailMessage[]
+}
+
+// Get last 30 days timestamp
+const getThirtyDaysAgo = () => {
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  return Math.floor(thirtyDaysAgo.getTime() / 1000)
 }
 
 Deno.serve(async (req) => {
@@ -117,82 +130,229 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch recent emails from Gmail API
-    const gmailResponse = await fetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=in:inbox',
+    // Check user's quota before processing
+    const { data: userHistory, error: historyError } = await supabase
+      .from('user_processing_history')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
+    if (historyError && historyError.code !== 'PGRST116') {
+      throw new Error(`Failed to get user processing history: ${historyError.message}`)
+    }
+
+    // Initialize history if doesn't exist
+    if (!userHistory) {
+      const { error: insertError } = await supabase
+        .from('user_processing_history')
+        .insert({
+          user_id: user.id,
+          subscription_tier: 'free',
+          conversations_processed: 0,
+          monthly_limit: 50
+        })
+      
+      if (insertError) {
+        throw new Error(`Failed to initialize user history: ${insertError.message}`)
+      }
+    }
+
+    const currentLimit = userHistory?.monthly_limit || 50
+    const currentProcessed = userHistory?.conversations_processed || 0
+
+    // Fetch threads from last 30 days with proper quota limiting
+    const thirtyDaysAgo = getThirtyDaysAgo()
+    const maxResults = Math.min(100, currentLimit - currentProcessed) // Don't exceed user's remaining quota
+    
+    if (maxResults <= 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Monthly conversation processing limit reached',
+          quota: { processed: currentProcessed, limit: currentLimit }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 429,
+        }
+      )
+    }
+
+    console.log(`Fetching up to ${maxResults} threads for user ${user.id} (quota: ${currentProcessed}/${currentLimit})`)
+    
+    // Fetch threads from last 30 days
+    const threadsResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=${maxResults}&q=after:${thirtyDaysAgo}`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
       }
-    );
+    )
 
-    if (!gmailResponse.ok) {
-      const errorText = await gmailResponse.text();
-      console.error('Gmail messages API error:', gmailResponse.status, errorText);
+    if (!threadsResponse.ok) {
+      const errorText = await threadsResponse.text()
+      console.error('Gmail threads API error:', threadsResponse.status, errorText)
       
-      if (gmailResponse.status === 403) {
+      if (threadsResponse.status === 403) {
         return new Response(
           JSON.stringify({ 
-            error: 'Gmail API access denied. The user does not have sufficient permissions to access Gmail data.' 
+            error: 'GMAIL_PERMISSIONS_REQUIRED',
+            message: 'Gmail API access denied. Please re-authorize with Gmail permissions.'
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 403,
           }
-        );
+        )
       }
       
-      throw new Error(`Gmail API error: ${gmailResponse.status} ${errorText}`);
+      throw new Error(`Gmail threads API error: ${threadsResponse.status} ${errorText}`)
     }
 
-    const gmailData = await gmailResponse.json()
-    console.log('Gmail messages fetched:', gmailData.messages?.length || 0)
+    const threadsData = await threadsResponse.json()
+    console.log('Gmail threads fetched:', threadsData.threads?.length || 0)
 
-    // Fetch detailed information for each message
-    const messages = []
-    if (gmailData.messages) {
-      for (const message of gmailData.messages.slice(0, 5)) { // Limit to 5 for now
-        const messageResponse = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
+    const conversations = []
+    let processedCount = 0
+
+    if (threadsData.threads) {
+      // Process threads with rate limiting
+      for (const thread of threadsData.threads) {
+        try {
+          // Add delay to avoid rate limiting
+          if (processedCount > 0 && processedCount % 10 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay every 10 requests
           }
-        )
 
-        if (messageResponse.ok) {
-          const messageData: GmailMessage = await messageResponse.json()
+          // Fetch full thread details
+          const threadResponse = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/threads/${thread.id}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          )
+
+          if (!threadResponse.ok) {
+            console.error(`Failed to fetch thread ${thread.id}:`, threadResponse.status)
+            continue
+          }
+
+          const threadData: GmailThread = await threadResponse.json()
           
-          // Extract relevant information
-          const headers = messageData.payload.headers
+          if (!threadData.messages || threadData.messages.length === 0) {
+            continue
+          }
+
+          // Get the most recent message in the thread
+          const lastMessage = threadData.messages[threadData.messages.length - 1]
+          const headers = lastMessage.payload.headers
+          
           const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject'
           const from = headers.find(h => h.name === 'From')?.value || 'Unknown Sender'
-          const date = headers.find(h => h.name === 'Date')?.value || messageData.internalDate
+          const to = headers.find(h => h.name === 'To')?.value || ''
+          const cc = headers.find(h => h.name === 'Cc')?.value || ''
+          
+          // Extract participants (from, to, cc)
+          const participants = []
+          if (from) participants.push(from)
+          if (to) participants.push(...to.split(',').map(p => p.trim()))
+          if (cc) participants.push(...cc.split(',').map(p => p.trim()))
+          
+          // Get message content (try body first, then parts)
+          let fullContent = lastMessage.snippet || ''
+          
+          // Try to get fuller content from body or parts
+          if (lastMessage.payload.parts) {
+            for (const part of lastMessage.payload.parts) {
+              if (part.body?.data) {
+                try {
+                  const decodedContent = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
+                  if (decodedContent.length > fullContent.length) {
+                    fullContent = decodedContent
+                  }
+                } catch (e) {
+                  // Ignore decoding errors
+                }
+              }
+            }
+          }
 
-          messages.push({
-            id: messageData.id,
-            threadId: messageData.threadId,
+          const conversation = {
+            user_id: user.id,
+            thread_id: threadData.id,
+            gmail_message_id: lastMessage.id,
             subject,
-            from,
-            date,
-            snippet: messageData.snippet,
-            labels: messageData.labelIds
-          })
+            participants: participants.filter(Boolean),
+            snippet: lastMessage.snippet,
+            full_content: fullContent.substring(0, 10000), // Limit to 10k chars
+            last_message_date: new Date(parseInt(lastMessage.internalDate)).toISOString(),
+            message_count: threadData.messages.length,
+            labels: lastMessage.labelIds || [],
+            has_attachments: lastMessage.payload.parts?.some(part => 
+              part.filename && part.filename.length > 0
+            ) || false
+          }
+
+          conversations.push(conversation)
+          processedCount++
+          
+        } catch (error) {
+          console.error(`Error processing thread ${thread.id}:`, error)
+          continue
         }
       }
     }
 
-    console.log('Processed messages:', messages.length)
+    console.log(`Processed ${processedCount} conversations for user ${user.id}`)
+
+    // Store conversations in database (upsert by user_id + thread_id)
+    if (conversations.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('conversations')
+        .upsert(conversations, { 
+          onConflict: 'user_id,thread_id',
+          ignoreDuplicates: false 
+        })
+      
+      if (upsertError) {
+        console.error('Error upserting conversations:', upsertError)
+        throw new Error(`Failed to store conversations: ${upsertError.message}`)
+      }
+    }
+
+    // Update user processing history
+    const newProcessedCount = currentProcessed + processedCount
+    const { error: updateError } = await supabase
+      .from('user_processing_history')
+      .upsert({
+        user_id: user.id,
+        conversations_processed: newProcessedCount,
+        last_processing_date: new Date().toISOString(),
+        subscription_tier: userHistory?.subscription_tier || 'free',
+        monthly_limit: currentLimit
+      }, { onConflict: 'user_id' })
+    
+    if (updateError) {
+      console.error('Error updating user history:', updateError)
+      // Don't throw - we got the data, just logging failed
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        messages,
-        totalCount: gmailData.resultSizeEstimate || 0
+        conversations_processed: processedCount,
+        total_conversations: conversations.length,
+        quota: {
+          processed: newProcessedCount,
+          limit: currentLimit,
+          remaining: currentLimit - newProcessedCount
+        },
+        message: `Successfully processed ${processedCount} email conversations from the last 30 days`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
