@@ -7,13 +7,120 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
+      conversation_analysis: {
+        Row: {
+          action_items: Json | null
+          category: string
+          completion_status: string
+          conversation_id: string
+          created_at: string
+          id: string
+          key_contacts: string[] | null
+          processed_at: string
+          sentiment: string
+          suggested_response: string | null
+          summary: string | null
+          topic: string | null
+          urgency_score: number | null
+        }
+        Insert: {
+          action_items?: Json | null
+          category: string
+          completion_status: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          key_contacts?: string[] | null
+          processed_at?: string
+          sentiment: string
+          suggested_response?: string | null
+          summary?: string | null
+          topic?: string | null
+          urgency_score?: number | null
+        }
+        Update: {
+          action_items?: Json | null
+          category?: string
+          completion_status?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          key_contacts?: string[] | null
+          processed_at?: string
+          sentiment?: string
+          suggested_response?: string | null
+          summary?: string | null
+          topic?: string | null
+          urgency_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_analysis_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          full_content: string | null
+          gmail_message_id: string
+          has_attachments: boolean | null
+          id: string
+          labels: string[] | null
+          last_message_date: string
+          message_count: number | null
+          participants: string[]
+          snippet: string | null
+          subject: string
+          thread_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_content?: string | null
+          gmail_message_id: string
+          has_attachments?: boolean | null
+          id?: string
+          labels?: string[] | null
+          last_message_date: string
+          message_count?: number | null
+          participants: string[]
+          snippet?: string | null
+          subject: string
+          thread_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_content?: string | null
+          gmail_message_id?: string
+          has_attachments?: boolean | null
+          id?: string
+          labels?: string[] | null
+          last_message_date?: string
+          message_count?: number | null
+          participants?: string[]
+          snippet?: string | null
+          subject?: string
+          thread_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -45,6 +152,39 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_processing_history: {
+        Row: {
+          conversations_processed: number | null
+          created_at: string
+          id: string
+          last_processing_date: string | null
+          monthly_limit: number | null
+          subscription_tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversations_processed?: number | null
+          created_at?: string
+          id?: string
+          last_processing_date?: string | null
+          monthly_limit?: number | null
+          subscription_tier?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversations_processed?: number | null
+          created_at?: string
+          id?: string
+          last_processing_date?: string | null
+          monthly_limit?: number | null
+          subscription_tier?: string
           updated_at?: string
           user_id?: string
         }
