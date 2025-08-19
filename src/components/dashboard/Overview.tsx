@@ -3,14 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, MessageSquare, CheckSquare, TrendingUp, Clock, Zap } from "lucide-react";
 import { ConversationsDashboard } from "@/components/ConversationsDashboard";
-import { DebugConversations } from "@/components/dashboard/DebugConversations";
 
 export function Overview() {
   return (
     <div className="space-y-6">
-      {/* Debug Panel */}
-      <DebugConversations />
-      
       {/* Conversations Dashboard */}
       <ConversationsDashboard />
 
