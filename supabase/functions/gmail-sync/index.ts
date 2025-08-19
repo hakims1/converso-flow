@@ -58,6 +58,19 @@ Deno.serve(async (req) => {
 
     console.log('Authenticated user:', user.id)
 
+    // Create a Supabase client that carries the caller's JWT for RLS-aware DB access
+    const supabaseAuthed = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      }
+    )
+
     // Get Google access token from request with proper error handling
     let body = {};
     let accessToken = '';
@@ -142,7 +155,7 @@ Deno.serve(async (req) => {
     }
 
     // Check user's quota before processing
-    const { data: userHistory, error: historyError } = await supabase
+    const { data: userHistory, error: historyError } = await supabaseAuthed
       .from('user_processing_history')
       .select('*')
       .eq('user_id', user.id)
@@ -154,7 +167,7 @@ Deno.serve(async (req) => {
 
     // Initialize history if doesn't exist
     if (!userHistory) {
-      const { error: insertError } = await supabase
+      const { error: insertError } = await supabaseAuthed
         .from('user_processing_history')
         .insert({
           user_id: user.id,
@@ -323,7 +336,7 @@ Deno.serve(async (req) => {
 
     // Store conversations in database (upsert by user_id + thread_id)
     if (conversations.length > 0) {
-      const { error: upsertError } = await supabase
+      const { error: upsertError } = await supabaseAuthed
         .from('conversations')
         .upsert(conversations, { 
           onConflict: 'user_id,thread_id',
@@ -338,7 +351,7 @@ Deno.serve(async (req) => {
 
     // Update user processing history
     const newProcessedCount = currentProcessed + processedCount
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAuthed
       .from('user_processing_history')
       .upsert({
         user_id: user.id,
