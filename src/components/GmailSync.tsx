@@ -63,10 +63,62 @@ const GmailSync = () => {
     }
   };
   return <div className="space-y-6">
-      <Card>
-        
-        
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Gmail Sync
+            </CardTitle>
+            <CardDescription>
+              Sync your Gmail conversations to analyze them
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {showReauthButton && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Gmail permissions need to be renewed. Please re-authenticate to continue syncing.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {gmailPermissions.isChecking ? (
+              <div className="text-center py-4">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Checking Gmail permissions...</p>
+              </div>
+            ) : showReauthButton ? (
+              <Button onClick={() => signInWithGoogle(true)} className="w-full">
+                Re-authenticate with Gmail
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSync} 
+                disabled={loading || !session}
+                className="w-full"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing Gmail...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Sync Gmail Conversations
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {totalCount > 0 && (
+              <p className="text-sm text-muted-foreground text-center">
+                Total emails processed: {totalCount}
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
       {messages.length > 0 && <Card>
           <CardHeader>

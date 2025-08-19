@@ -58,10 +58,21 @@ Deno.serve(async (req) => {
 
     console.log('Authenticated user:', user.id)
 
-    // Get Google access token from request
-    const body = await req.json();
-    let accessToken = body.access_token;
-    const testOnly = body.test_only === true;
+    // Get Google access token from request with proper error handling
+    let body = {};
+    let accessToken = '';
+    let testOnly = false;
+    
+    try {
+      const requestText = await req.text();
+      if (requestText.trim()) {
+        body = JSON.parse(requestText);
+        accessToken = body.access_token || '';
+        testOnly = body.test_only === true;
+      }
+    } catch (jsonError) {
+      console.log('No JSON body provided, checking headers for token');
+    }
     
     // Fallback: try to get from headers if not in body
     if (!accessToken) {
