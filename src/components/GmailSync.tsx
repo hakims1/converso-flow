@@ -29,10 +29,18 @@ const GmailSync = () => {
     setHasInitialSync(true);
   };
 
+  // Check permissions on initial load
+  useEffect(() => {
+    if (session && !gmailPermissions.isChecking) {
+      console.log('📧 Checking Gmail permissions on component mount...');
+      gmailPermissions.checkPermissions();
+    }
+  }, [session]);
+
   // Auto-sync when permissions are available
   useEffect(() => {
     if (gmailPermissions.hasPermissions && !hasInitialSync && !loading) {
-      // Automatically sync when permissions are confirmed (only once)
+      console.log('🚀 Auto-syncing Gmail conversations...');
       syncGmail();
       setHasInitialSync(true);
     }

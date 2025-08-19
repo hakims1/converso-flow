@@ -39,6 +39,12 @@ export const useGmail = () => {
       return;
     }
 
+    console.log('🔄 Starting Gmail sync...', {
+      hasSession: !!session,
+      hasAccessToken: !!session.access_token,
+      hasProviderToken: !!session.provider_token
+    });
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
@@ -49,6 +55,8 @@ export const useGmail = () => {
           access_token: session.provider_token ?? '',
         },
       });
+
+      console.log('📡 Gmail sync response:', { data, error });
 
       if (error) {
         // Check if it's a permissions error
