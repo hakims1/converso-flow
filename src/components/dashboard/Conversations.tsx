@@ -4,8 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mail, Search, Filter, MessageSquare, Calendar, User } from "lucide-react";
+import { useAnalysis } from "@/hooks/useAnalysis";
 
 export function Conversations() {
+  const analysis = useAnalysis();
+  const handleAnalyze = () => analysis.analyzeConversations({ max: 10, sinceLast: true });
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -16,9 +19,18 @@ export function Conversations() {
             View and analyze your email conversations with AI insights.
           </p>
         </div>
-        <Button className="gradient-primary text-white border-0">
-          <MessageSquare className="mr-2 h-4 w-4" />
-          Analyze Conversations
+        <Button className="gradient-primary text-white border-0" onClick={handleAnalyze} disabled={analysis.loading}>
+          {analysis.loading ? (
+            <>
+              <MessageSquare className="mr-2 h-4 w-4 animate-pulse" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Analyze Conversations
+            </>
+          )}
         </Button>
       </div>
 
