@@ -1,12 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useConversations } from "@/hooks/useConversations";
-import { RefreshCw, MessageSquare, Users, Calendar } from "lucide-react";
+import { useConversationAnalysis } from "@/hooks/useConversationAnalysis";
+import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 
 export function DebugConversations() {
-  const { conversations, loading, error, refetch } = useConversations();
+  const { conversations, loading, error, refetch } = useConversationAnalysis();
 
   const truncateContent = (content: string, maxLength: number = 500) => {
     if (content.length <= maxLength) return content;
@@ -23,7 +23,7 @@ export function DebugConversations() {
               Debug: Conversations
             </CardTitle>
             <CardDescription>
-              View synced Gmail conversation data (last {conversations.length} conversations)
+              View synced Gmail conversations with AI analysis results ({conversations.length} conversations)
             </CardDescription>
           </div>
           <Button
@@ -65,9 +65,20 @@ export function DebugConversations() {
               <div key={conversation.id} className="border rounded-lg p-4 space-y-3 bg-background/50">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-sm mb-1">
-                      {conversation.subject || 'No Subject'}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-sm">
+                        {conversation.subject || 'No Subject'}
+                      </h3>
+                      {conversation.analysis ? (
+                        <div title="AI Analyzed">
+                          <Brain className="h-3 w-3 text-green-500" />
+                        </div>
+                      ) : (
+                        <div title="Not analyzed">
+                          <AlertCircle className="h-3 w-3 text-amber-500" />
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                       <Users className="h-3 w-3" />
                       <span>
@@ -82,6 +93,83 @@ export function DebugConversations() {
                     </span>
                   </div>
                 </div>
+
+                {conversation.analysis && (
+                  <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-md space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-blue-300">
+                      <Brain className="h-3 w-3" />
+                      AI Analysis
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="font-medium text-muted-foreground">Category:</span>
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {conversation.analysis.category}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Sentiment:</span>
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {conversation.analysis.sentiment}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Status:</span>
+                        <Badge 
+                          variant={
+                            conversation.analysis.completion_status === 'complete' ? 'default' :
+                            conversation.analysis.completion_status === 'need_to_respond' ? 'destructive' : 'secondary'
+                          }
+                          className="ml-1 text-xs"
+                        >
+                          {conversation.analysis.completion_status}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Urgency:</span>
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {conversation.analysis.urgency_score || 'N/A'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {conversation.analysis.topic && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">Topic:</span>
+                        <span className="ml-1">{conversation.analysis.topic}</span>
+                      </div>
+                    )}
+
+                    {conversation.analysis.summary && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">Summary:</span>
+                        <p className="mt-1 text-foreground/80">{conversation.analysis.summary}</p>
+                      </div>
+                    )}
+
+                    {conversation.analysis.action_items && conversation.analysis.action_items.length > 0 && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">Action Items:</span>
+                        <ul className="mt-1 space-y-1">
+                          {conversation.analysis.action_items.map((item, index) => (
+                            <li key={index} className="text-foreground/80 flex items-start gap-1">
+                              <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {conversation.analysis.suggested_response && (
+                      <div className="text-xs">
+                        <span className="font-medium text-muted-foreground">Suggested Response:</span>
+                        <p className="mt-1 italic text-foreground/80">{conversation.analysis.suggested_response}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="text-xs">
                   <div className="font-medium mb-1 text-muted-foreground">Content Preview:</div>

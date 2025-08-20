@@ -236,27 +236,107 @@ function buildPrompt(conv: any): string {
   const participants = Array.isArray(conv.participants) ? conv.participants.join(', ') : ''
   const msgCount = conv.message_count || 1
 
-  return `You are an assistant that analyzes email conversations and returns STRICT JSON only. No prose. 
-Return a JSON object with keys exactly as follows:
-{
-  "sentiment": "positive|neutral|negative",
-  "category": "Sales|Support|Internal|Other",
-  "topic": "string or null",
-  "summary": "1-2 sentence concise summary",
-  "completion_status": "complete|needs_follow_up|awaiting_response",
-  "action_items": [{"text": "string", "owner": "me|other|unknown", "due": "ISO date or null"}],
-  "key_contacts": ["emails or names"],
-  "urgency_score": 0-100,
-  "suggested_response": "string or null"
-}
+  const systemInstructions = `You are an AI assistant helping users manage their email conversations and identify opportunities that need attention. Your role is to analyze email conversations and help users keep track of important communications that require follow-up or response.
 
-Context:
-Subject: ${subject}
-Participants: ${participants}
-Message Count: ${msgCount}
-Content:
-${content}
-`
+ANALYSIS PERSPECTIVE:
+- Always analyze from the main user's perspective (the person whose email account is being analyzed)
+- Focus on helping the user identify what requires their response or needs follow-up to extract a response from the recipient.
+- Provide actionable insights for relationship and opportunity management
+
+RESPONSE GUIDELINES:
+- Keep suggestions brief and actionable
+- Match the tone of the main user's messages in the conversation
+- Always use a human tone
+- If uncertain about what to say, use professional but friendly language appropriate for business communications
+- Only suggest responses for "need_to_respond" or "needs_followup" status
+
+OUTPUT REQUIREMENTS:
+- Return ONLY valid JSON format
+- No additional text or explanations outside the JSON
+- Follow the exact JSON structure provided`
+
+  const analysisPrompt = `Analyze this email conversation and provide insights in JSON format. Follow these specific guidelines:
+
+Analyze these emails as if you are an assistant helping the main user keep track of email conversations that need attention. With many outgoing and incoming emails from several different entities, help the user identify opportunities and communications that haven't been completed.
+
+CRITICAL: MAIN USER IDENTIFICATION
+The main user whose perspective we are analyzing is: Matt Hakimi (matt@peachscore.com)
+- ALL analysis must be from Matt's perspective
+- ALL completion status determinations are about what MATT needs to do
+- ALL suggested responses should be written as if MATT is responding
+- When determining "need_to_respond" vs "needs_followup", ask: "What does MATT need to do next?"
+
+CONVERSATION: ${content}
+
+ANALYSIS INSTRUCTIONS:
+
+Sentiment Analysis Guidelines:
+- Focus on the FINAL sentiment of the conversation from the person who sent the most recent email, not all individual emails
+- "positive" = agreement, satisfaction, successful resolution, enthusiasm
+- "negative" = disagreement, dissatisfaction, complaints, rejection
+- "frustrated" = repeated issues, delays, misunderstandings, impatience
+- "neutral" = informational, factual, no strong emotion
+
+Topic Guidelines:
+Try to summarize the subject of the email in 5 words max, but you can use more words if absolutely necessary.
+
+Category Guidelines:
+- product - any communication that revolves around the product or service that the person does
+- sales/marketing - any communications that involve selling the product or trying to make money or acquire users or sales
+- support - Any communications about the product from external recipients or 3rd parties, particularly users of the product
+- solicitations - Unsolicited messages from contacts whom I, as the main user, have never sent an email to
+- partnership - attempts to build relationship with someone in order to utilize their skills or community or similar for the businesses' gain
+- other - can not be categorized within the other categories
+
+Completion Status Rules:
+SIMPLIFIED COMPLETION STATUS RULES:
+1. Most recent message FROM Matt → "needs_followup" 
+   UNLESS: Matt clearly concluded the conversation (thanks, confirmed, done, etc.)
+
+2. Most recent message TO Matt (especially if there is a question contained in the message) → "need_to_respond"
+   UNLESS: It's clearly just an FYI or pure acknowledgment
+
+3. Either case with clear resolution → "complete"
+
+CONCLUSION INDICATORS:
+- "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
+- Statements where Matt commits to future action without asking for response
+
+Number of communications:
+This is simply the number of times a communication was made by any participant of the email thread. (I.e. if it's an email that was sent and never replied to, the Number of communications = 1)
+
+Action Items Detection:
+- Only include specific, actionable tasks with clear ownership
+- Include deadlines if mentioned
+- Format: "Person to do X by Y date" or "Person to do X"
+- Exclude vague statements like "let's stay in touch"
+
+Urgency Scoring Criteria:
+- 9-10: Immediate deadlines, angry customers, urgent problems
+- 7-8: Time-sensitive opportunities, important decisions pending
+- 5-6: Standard follow-ups, routine business
+- 3-4: Informational, non-urgent requests
+- 1-2: General networking, casual conversations
+
+Key Contacts Rules:
+- Include people who: made decisions, have authority, mentioned budget/timeline, expressed strong interest
+- Exclude: CC'd people who didn't participate, automated senders
+
+OUTPUT FORMAT:
+{
+  "category": "one of: product, sales/marketing, support, solicitations, partnership, other",
+  "topic": "specific subject in 2-5 words",
+  "sentiment": "one of: positive, neutral, negative, frustrated, satisfied",
+  "completion_status": "one of: complete, need_to_respond, needs_followup",
+  "number_of_communications": ${msgCount},
+  "summary": "2-3 sentence overview focusing on key outcomes and next steps",
+  "action_items": ["specific task 1", "specific task 2"],
+  "urgency_score": "number_1_to_10",
+  "key_contacts": ["name1", "name2"],
+  "suggested_response": "brief suggested reply or null if no response needed"
+}`
+
+  return `${systemInstructions}\n\n${analysisPrompt}`
 }
 
 function safeParseJSON(text: string): any | null {
@@ -277,15 +357,14 @@ function mapToRow(conversation_id: string, p: any) {
     return Number.isFinite(n) ? Math.round(n) : null
   }
   const toArray = (v: any) => (Array.isArray(v) ? v : null)
-  const toJSON = (v: any) => (v && typeof v === 'object' ? v : [])
 
   return {
     conversation_id,
     sentiment: toText(p.sentiment) || 'neutral',
-    category: toText(p.category) || 'Other',
+    category: toText(p.category) || 'other',
     topic: toText(p.topic) || null,
     summary: toText(p.summary) || null,
-    completion_status: toText(p.completion_status) || 'needs_follow_up',
+    completion_status: toText(p.completion_status) || 'needs_followup',
     action_items: Array.isArray(p.action_items) ? p.action_items : [],
     key_contacts: toArray(p.key_contacts) || [],
     urgency_score: toInt(p.urgency_score) ?? null,
