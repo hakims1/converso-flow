@@ -12,7 +12,8 @@ interface GmailMessage {
   snippet: string
   payload: {
     headers: Array<{ name: string; value: string }>
-    parts?: Array<{ body: { data?: string } }>
+    body?: { data?: string }
+    parts?: Array<{ filename?: string; mimeType?: string; body: { data?: string } }>
   }
   internalDate: string
 }
@@ -28,6 +29,8 @@ const getThirtyDaysAgo = () => {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   return Math.floor(thirtyDaysAgo.getTime() / 1000)
 }
+
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES','CATEGORY_FORUMS']);
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -272,9 +275,18 @@ Deno.serve(async (req) => {
             continue
           }
 
-          // Get the most recent message in the thread
-          const lastMessage = threadData.messages[threadData.messages.length - 1]
-          const headers = lastMessage.payload.headers
+          // Get the most recent message in the thread (sorted by internalDate)
+          const sortedMessages = [...threadData.messages].sort((a, b) => Number(a.internalDate) - Number(b.internalDate))
+          const lastMessage = sortedMessages[sortedMessages.length - 1]
+          const headers = lastMessage.payload.headers || []
+
+          // Filter out promotional/social/updates/forums and List-Unsubscribe
+          const hasBlockedLabel = (lastMessage.labelIds || []).some((id) => BLOCKED_CATEGORIES.has(id))
+          const hasListUnsubscribe = headers.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe')
+          if (hasBlockedLabel || hasListUnsubscribe) {
+            console.log(`Skipping thread ${threadData.id} due to filtered category or List-Unsubscribe header`)
+            continue
+          }
           
           const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject'
           const from = headers.find(h => h.name === 'From')?.value || 'Unknown Sender'
@@ -282,16 +294,25 @@ Deno.serve(async (req) => {
           const cc = headers.find(h => h.name === 'Cc')?.value || ''
           
           // Extract participants (from, to, cc)
-          const participants = []
+          const participants = [] as string[]
           if (from) participants.push(from)
           if (to) participants.push(...to.split(',').map(p => p.trim()))
           if (cc) participants.push(...cc.split(',').map(p => p.trim()))
           
-          // Get message content (try body first, then parts)
+          // Get message content (try payload.body first, then parts, fallback to snippet)
           let fullContent = lastMessage.snippet || ''
+
+          // Try to get fuller content from payload.body
+          if (lastMessage.payload?.body?.data) {
+            try {
+              fullContent = atob(lastMessage.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'))
+            } catch (_) {
+              // ignore
+            }
+          }
           
-          // Try to get fuller content from body or parts
-          if (lastMessage.payload.parts) {
+          // Try to get even fuller content from parts
+          if (lastMessage.payload?.parts) {
             for (const part of lastMessage.payload.parts) {
               if (part.body?.data) {
                 try {
@@ -299,7 +320,7 @@ Deno.serve(async (req) => {
                   if (decodedContent.length > fullContent.length) {
                     fullContent = decodedContent
                   }
-                } catch (e) {
+                } catch (_) {
                   // Ignore decoding errors
                 }
               }
