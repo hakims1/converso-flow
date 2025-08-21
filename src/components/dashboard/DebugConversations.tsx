@@ -1,14 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useConversationAnalysis } from "@/hooks/useConversationAnalysis";
 import { useAnalysis } from "@/hooks/useAnalysis";
-import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap, Info } from "lucide-react";
 import { format } from "date-fns";
 
 export function DebugConversations() {
   const { conversations, loading, error, refetch } = useConversationAnalysis();
   const { loading: analyzing, analyzeConversations } = useAnalysis();
+  const { user } = useAuth();
 
   const truncateContent = (content: string, maxLength: number = 500) => {
     if (content.length <= maxLength) return content;
@@ -32,7 +35,11 @@ export function DebugConversations() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => analyzeConversations({ max: 10, sinceLast: true })}
+              onClick={async () => {
+                await analyzeConversations({ max: 10, sinceLast: true });
+                // Auto-refresh after analysis completes
+                setTimeout(() => refetch(), 2000);
+              }}
               disabled={analyzing}
               className="gap-2"
             >
@@ -53,6 +60,17 @@ export function DebugConversations() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Preview Authentication Notice */}
+        {!user && window.location.pathname.includes('preview') && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Preview Mode:</strong> You're viewing the dashboard in preview mode. 
+              To see actual conversation data, please <strong>sign in with email/password</strong> using the Auth page.
+              Google OAuth won't work in this preview iframe.
+            </AlertDescription>
+          </Alert>
+        )}
         {error && (
           <div className="text-red-500 text-sm mb-4 p-3 bg-red-50 rounded-md">
             Error: {error}
