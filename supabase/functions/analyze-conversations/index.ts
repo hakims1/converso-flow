@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
 
     for (const conv of toAnalyze) {
       try {
-        const input = buildPrompt(conv)
+        const input = buildPrompt(conv, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
         const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             model,
             max_tokens: 800,
+            temperature: 0.1,
             messages: [
               { role: 'user', content: input },
             ],
@@ -230,7 +231,7 @@ Deno.serve(async (req) => {
   }
 })
 
-function buildPrompt(conv: any): string {
+function buildPrompt(conv: any, userName: string, userEmail: string): string {
   const content = conv.full_content || conv.snippet || ''
   const subject = conv.subject || ''
   const participants = Array.isArray(conv.participants) ? conv.participants.join(', ') : ''
@@ -260,11 +261,11 @@ OUTPUT REQUIREMENTS:
 Analyze these emails as if you are an assistant helping the main user keep track of email conversations that need attention. With many outgoing and incoming emails from several different entities, help the user identify opportunities and communications that haven't been completed.
 
 CRITICAL: MAIN USER IDENTIFICATION
-The main user whose perspective we are analyzing is: Matt Hakimi (matt@peachscore.com)
-- ALL analysis must be from Matt's perspective
-- ALL completion status determinations are about what MATT needs to do
-- ALL suggested responses should be written as if MATT is responding
-- When determining "need_to_respond" vs "needs_followup", ask: "What does MATT need to do next?"
+The main user whose perspective we are analyzing is: ${userName} (${userEmail})
+- ALL analysis must be from ${userName}'s perspective
+- ALL completion status determinations are about what ${userName} needs to do
+- ALL suggested responses should be written as if ${userName} is responding
+- When determining "need_to_respond" vs "needs_followup", ask: "What does ${userName} need to do next?"
 
 CONVERSATION: ${content}
 
@@ -288,17 +289,17 @@ Category Guidelines (must use EXACT values from this list):
 
 Completion Status Rules:
 SIMPLIFIED COMPLETION STATUS RULES:
-1. Most recent message FROM Matt → "needs_followup" 
-   UNLESS: Matt clearly concluded the conversation (thanks, confirmed, done, etc.)
+1. Most recent message FROM ${userName} → "needs_followup" 
+   UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
 
-2. Most recent message TO Matt (especially if there is a question contained in the message) → "need_to_respond"
+2. Most recent message TO ${userName} (especially if there is a question contained in the message) → "need_to_respond"
    UNLESS: It's clearly just an FYI or pure acknowledgment
 
 3. Either case with clear resolution → "complete"
 
 CONCLUSION INDICATORS:
 - "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
-- Statements where Matt commits to future action without asking for response
+- Statements where ${userName} commits to future action without asking for response
 
 Number of communications:
 This is simply the number of times a communication was made by any participant of the email thread. (I.e. if it's an email that was sent and never replied to, the Number of communications = 1)
