@@ -2,11 +2,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useConversationAnalysis } from "@/hooks/useConversationAnalysis";
-import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle } from "lucide-react";
+import { useAnalysis } from "@/hooks/useAnalysis";
+import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap } from "lucide-react";
 import { format } from "date-fns";
 
 export function DebugConversations() {
   const { conversations, loading, error, refetch } = useConversationAnalysis();
+  const { loading: analyzing, analyzeConversations } = useAnalysis();
 
   const truncateContent = (content: string, maxLength: number = 500) => {
     if (content.length <= maxLength) return content;
@@ -26,16 +28,28 @@ export function DebugConversations() {
               View synced Gmail conversations with AI analysis results ({conversations.length} conversations)
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refetch}
-            disabled={loading}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => analyzeConversations({ max: 10, sinceLast: true })}
+              disabled={analyzing}
+              className="gap-2"
+            >
+              <Zap className={`h-4 w-4 ${analyzing ? 'animate-pulse' : ''}`} />
+              {analyzing ? 'Analyzing...' : 'Analyze'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refetch}
+              disabled={loading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
