@@ -8,11 +8,11 @@ import { DashboardSettings } from "@/components/dashboard/Settings";
 export function DashboardContent() {
   return (
     <Routes>
-      <Route path="/" element={<Overview />} />
-      <Route path="/conversations" element={<Conversations />} />
-      <Route path="/actions" element={<ActionItems />} />
-      <Route path="/analytics" element={<Analytics />} />
-      <Route path="/settings" element={<DashboardSettings />} />
+      <Route index element={<Overview />} />
+      <Route path="conversations" element={<Conversations />} />
+      <Route path="actions" element={<ActionItems />} />
+      <Route path="analytics" element={<Analytics />} />
+      <Route path="settings" element={<DashboardSettings />} />
     </Routes>
   );
 }
