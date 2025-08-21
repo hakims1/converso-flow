@@ -369,8 +369,16 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        conversations_processed: processedCount,
-        total_conversations: conversations.length,
+        messages: conversations.map(c => ({
+          id: c.gmail_message_id,
+          threadId: c.thread_id,
+          subject: c.subject,
+          from: c.participants[0] || '',
+          date: c.last_message_date,
+          snippet: c.snippet,
+          labels: c.labels || []
+        })),
+        totalCount: processedCount,
         quota: {
           processed: newProcessedCount,
           limit: currentLimit,

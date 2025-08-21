@@ -280,13 +280,13 @@ Sentiment Analysis Guidelines:
 Topic Guidelines:
 Try to summarize the subject of the email in 5 words max, but you can use more words if absolutely necessary.
 
-Category Guidelines:
-- product - any communication that revolves around the product or service that the person does
-- sales/marketing - any communications that involve selling the product or trying to make money or acquire users or sales
-- support - Any communications about the product from external recipients or 3rd parties, particularly users of the product
-- solicitations - Unsolicited messages from contacts whom I, as the main user, have never sent an email to
-- partnership - attempts to build relationship with someone in order to utilize their skills or community or similar for the businesses' gain
-- other - can not be categorized within the other categories
+Category Guidelines (must use EXACT values):
+- "product" - any communication that revolves around the product or service that the person does
+- "sales" - any communications that involve selling the product or trying to make money or acquire users or sales  
+- "support" - Any communications about the product from external recipients or 3rd parties, particularly users of the product
+- "solicitations" - Unsolicited messages from contacts whom I, as the main user, have never sent an email to
+- "partnership" - attempts to build relationship with someone in order to utilize their skills or community or similar for the businesses' gain
+- "other" - can not be categorized within the other categories
 
 Completion Status Rules:
 SIMPLIFIED COMPLETION STATUS RULES:
@@ -324,14 +324,14 @@ Key Contacts Rules:
 
 OUTPUT FORMAT:
 {
-  "category": "one of: product, sales/marketing, support, solicitations, partnership, other",
+  "category": "one of: product, sales, support, solicitations, partnership, other",
   "topic": "specific subject in 2-5 words",
-  "sentiment": "one of: positive, neutral, negative, frustrated, satisfied",
+  "sentiment": "one of: positive, neutral, negative, frustrated",
   "completion_status": "one of: complete, need_to_respond, needs_followup",
   "number_of_communications": ${msgCount},
   "summary": "2-3 sentence overview focusing on key outcomes and next steps",
   "action_items": ["specific task 1", "specific task 2"],
-  "urgency_score": "number_1_to_10",
+  "urgency_score": 1,
   "key_contacts": ["name1", "name2"],
   "suggested_response": "brief suggested reply or null if no response needed"
 }`
@@ -358,13 +358,22 @@ function mapToRow(conversation_id: string, p: any) {
   }
   const toArray = (v: any) => (Array.isArray(v) ? v : null)
 
+  // Validate and constrain values to match database constraints
+  const validCategories = ['product', 'sales', 'support', 'solicitations', 'partnership', 'other']
+  const validSentiments = ['positive', 'neutral', 'negative', 'frustrated']
+  const validCompletionStatuses = ['complete', 'need_to_respond', 'needs_followup']
+
+  const category = toText(p.category)
+  const sentiment = toText(p.sentiment) 
+  const completion_status = toText(p.completion_status)
+
   return {
     conversation_id,
-    sentiment: toText(p.sentiment) || 'neutral',
-    category: toText(p.category) || 'other',
+    sentiment: validSentiments.includes(sentiment) ? sentiment : 'neutral',
+    category: validCategories.includes(category) ? category : 'other',
     topic: toText(p.topic) || null,
     summary: toText(p.summary) || null,
-    completion_status: toText(p.completion_status) || 'needs_followup',
+    completion_status: validCompletionStatuses.includes(completion_status) ? completion_status : 'needs_followup',
     action_items: Array.isArray(p.action_items) ? p.action_items : [],
     key_contacts: toArray(p.key_contacts) || [],
     urgency_score: toInt(p.urgency_score) ?? null,
