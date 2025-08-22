@@ -89,15 +89,19 @@ Deno.serve(async (req) => {
     } catch (jsonError) {
       console.log('No JSON body provided, checking headers for token');
     }
-    
+    // Controls for sync scope
+    const _b: any = body || {};
+    const fullHistory = typeof _b.full_history === 'boolean' ? _b.full_history : true;
+    const sinceDays = typeof _b.since_days === 'number' ? Math.max(0, _b.since_days) : 0;
+    const maxThreads = typeof _b.max_threads === 'number' ? Math.max(0, _b.max_threads) : 0;
+
     // Fallback: try to get from headers if not in body
     if (!accessToken) {
-      const authHeader = req.headers.get('x-google-access-token');
-      if (authHeader) {
-        accessToken = authHeader;
+      const tokenHeader = req.headers.get('x-google-access-token');
+      if (tokenHeader) {
+        accessToken = tokenHeader;
       }
     }
-
     if (!accessToken) {
       console.error('No Google access token provided');
       return new Response(
@@ -161,96 +165,67 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check user's quota before processing
-    const { data: userHistory, error: historyError } = await supabaseAuthed
-      .from('user_processing_history')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
+    // Build query scope for threads
+    const now = Date.now();
+    const defaultDays = 30;
+    const days = fullHistory ? 0 : (sinceDays > 0 ? sinceDays : defaultDays);
+    const afterUnix = days > 0 ? Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000) : 0;
 
-    if (historyError && historyError.code !== 'PGRST116') {
-      throw new Error(`Failed to get user processing history: ${historyError.message}`)
-    }
+    // Paginate through all threads
+    const threads: Array<{ id: string }> = [];
+    let pageToken: string | undefined = undefined;
+    const perPage = 100;
+    const cap = maxThreads > 0 ? maxThreads : 5000; // safety cap
 
-    // Initialize history if doesn't exist
-    if (!userHistory) {
-      const { error: insertError } = await supabaseAuthed
-        .from('user_processing_history')
-        .insert({
-          user_id: user.id,
-          subscription_tier: 'free',
-          conversations_processed: 0,
-          monthly_limit: 50
-        })
-      
-      if (insertError) {
-        throw new Error(`Failed to initialize user history: ${insertError.message}`)
-      }
-    }
+    do {
+      const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/threads');
+      url.searchParams.set('maxResults', String(perPage));
+      if (afterUnix > 0) url.searchParams.set('q', `after:${afterUnix}`);
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-    const currentLimit = userHistory?.monthly_limit || 50
-    const currentProcessed = userHistory?.conversations_processed || 0
-
-    // Fetch threads from last 30 days with proper quota limiting
-    const thirtyDaysAgo = getThirtyDaysAgo()
-    const maxResults = Math.min(100, currentLimit - currentProcessed) // Don't exceed user's remaining quota
-    
-    if (maxResults <= 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Monthly conversation processing limit reached',
-          quota: { processed: currentProcessed, limit: currentLimit }
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 429,
-        }
-      )
-    }
-
-    console.log(`Fetching up to ${maxResults} threads for user ${user.id} (quota: ${currentProcessed}/${currentLimit})`)
-    
-    // Fetch threads from last 30 days
-    const threadsResponse = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=${maxResults}&q=after:${thirtyDaysAgo}`,
-      {
+      const resp = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-      }
-    )
+      });
 
-    if (!threadsResponse.ok) {
-      const errorText = await threadsResponse.text()
-      console.error('Gmail threads API error:', threadsResponse.status, errorText)
-      
-      if (threadsResponse.status === 403) {
-        return new Response(
-          JSON.stringify({ 
-            error: 'GMAIL_PERMISSIONS_REQUIRED',
-            message: 'Gmail API access denied. Please re-authorize with Gmail permissions.'
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 403,
-          }
-        )
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        console.error('Gmail threads API error:', resp.status, errorText);
+        if (resp.status === 403) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'GMAIL_PERMISSIONS_REQUIRED',
+              message: 'Gmail API access denied. Please re-authorize with Gmail permissions.'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          );
+        }
+        throw new Error(`Gmail threads API error: ${resp.status} ${errorText}`);
       }
-      
-      throw new Error(`Gmail threads API error: ${threadsResponse.status} ${errorText}`)
-    }
 
-    const threadsData = await threadsResponse.json()
-    console.log('Gmail threads fetched:', threadsData.threads?.length || 0)
+      const data = await resp.json();
+      if (Array.isArray(data.threads)) {
+        for (const t of data.threads) {
+          threads.push({ id: t.id });
+          if (threads.length >= cap) break;
+        }
+      }
+      pageToken = data.nextPageToken && threads.length < cap ? data.nextPageToken : undefined;
+      if (threads.length % 500 === 0 && threads.length > 0) {
+        await new Promise((r) => setTimeout(r, 500)); // brief pause to avoid rate limits
+      }
+    } while (pageToken);
+
+    console.log('Gmail threads fetched total:', threads.length);
 
     const conversations = []
     let processedCount = 0
 
-    if (threadsData.threads) {
+    if (threads.length > 0) {
       // Process threads with rate limiting
-      for (const thread of threadsData.threads) {
+      for (const thread of threads) {
         try {
           // Add delay to avoid rate limiting
           if (processedCount > 0 && processedCount % 10 === 0) {
@@ -314,13 +289,12 @@ Deno.serve(async (req) => {
           }
           const participants = Array.from(participantsSet)
 
-          // Human conversation heuristic: must include the user and at least one non-noreply participant
+          // Ingestion heuristic: ensure the user is part of the thread; don't over-filter
           const isNoReply = (s: string) => /no[\-\s]?reply|donotreply|do[\-\s]?not[\-\s]?reply|notification|mailer-daemon|noreply/i.test(s)
           const lowerParts = participants.map((p) => p.toLowerCase())
           const includesUser = userEmail ? lowerParts.some((p) => p.includes(userEmail)) : true
-          const includesOtherHuman = lowerParts.some((p) => !p.includes(userEmail) && !isNoReply(p))
-          if (!includesUser || !includesOtherHuman) {
-            console.log(`Skipping thread ${threadData.id} due to not meeting human conversation criteria`)
+          if (!includesUser) {
+            console.log(`Skipping thread ${threadData.id} because it doesn't include the user`)
             continue
           }
           
@@ -399,22 +373,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update user processing history
-    const newProcessedCount = currentProcessed + processedCount
-    const { error: updateError } = await supabaseAuthed
-      .from('user_processing_history')
-      .upsert({
-        user_id: user.id,
-        conversations_processed: newProcessedCount,
-        last_processing_date: new Date().toISOString(),
-        subscription_tier: userHistory?.subscription_tier || 'free',
-        monthly_limit: currentLimit
-      }, { onConflict: 'user_id' })
-    
-    if (updateError) {
-      console.error('Error updating user history:', updateError)
-      // Don't throw - we got the data, just logging failed
-    }
+    // Ingestion complete; not updating processing quotas here (reserved for analysis).
 
     return new Response(
       JSON.stringify({
@@ -429,12 +388,7 @@ Deno.serve(async (req) => {
           labels: c.labels || []
         })),
         totalCount: processedCount,
-        quota: {
-          processed: newProcessedCount,
-          limit: currentLimit,
-          remaining: currentLimit - newProcessedCount
-        },
-        message: `Successfully processed ${processedCount} email conversations from the last 30 days`
+        message: `Successfully processed ${processedCount} email conversations`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

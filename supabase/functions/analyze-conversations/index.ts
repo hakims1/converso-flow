@@ -79,30 +79,18 @@ Deno.serve(async (req) => {
       // ignore
     }
 
-    const since_last = body.since_last !== false
-    const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(100, body.max_to_analyze)) : 25
     const respect_tier = body.respect_tier !== false
     const model = body.model || 'claude-3-5-haiku-20241022'
+    const since_last = respect_tier ? false : body.since_last !== false
+    const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(1000, body.max_to_analyze)) : 1000
 
     const { data: history } = await supabaseAuthed
       .from('user_processing_history')
       .select('subscription_tier, monthly_limit, conversations_processed')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
-    let tierLimit = 50
-    if (respect_tier && history) {
-      const remaining = Math.max(0, (history.monthly_limit ?? 50) - (history.conversations_processed ?? 0))
-      tierLimit = Math.max(0, remaining)
-    }
-
-    const maxToAnalyze = Math.min(requestedMax, tierLimit || requestedMax)
-    if (maxToAnalyze <= 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'TIER_LIMIT_REACHED' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
-      )
-    }
+    const isFree = (history?.subscription_tier ?? 'free') === 'free'
 
     // Fetch recent conversations (cap to 300 to compute freshness)
     const { data: conversations, error: convErr } = await supabaseAuthed

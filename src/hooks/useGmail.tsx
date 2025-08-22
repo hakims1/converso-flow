@@ -53,6 +53,7 @@ export const useGmail = () => {
         },
         body: {
           access_token: session.provider_token ?? '',
+          full_history: true,
         },
       });
 
@@ -76,22 +77,7 @@ export const useGmail = () => {
         setTotalCount(response.totalCount);
         setNeedsReauth(false);
         
-        // Trigger analysis of newly synced conversations
-        try {
-          console.log('🧠 Triggering conversation analysis...');
-          const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-conversations', {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-            body: { max_to_analyze: 10, since_last: true, respect_tier: true }
-          });
-          
-          if (analysisError) {
-            console.error('Analysis trigger error:', analysisError);
-          } else {
-            console.log('✅ Analysis triggered successfully:', analysisData);
-          }
-        } catch (analysisErr) {
-          console.error('Failed to trigger analysis:', analysisErr);
-        }
+        // Analysis is now manual. Users can trigger it from the dashboard when ready.
         
         toast({
           title: 'Gmail Synced',
