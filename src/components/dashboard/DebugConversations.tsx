@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAuth } from "@/hooks/useAuth";
-import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap, Info } from "lucide-react";
+import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap, Info, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
 export function DebugConversations() {
@@ -27,7 +27,8 @@ export function DebugConversations() {
           *,
           conversations (
             subject,
-            participants
+            participants,
+            thread_id
           )
         `)
         .order('processed_at', { ascending: false })
@@ -154,9 +155,20 @@ export function DebugConversations() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
-                    <span>
-                      {format(new Date(analysis.processed_at), 'MMM d, yyyy HH:mm')}
-                    </span>
+                    <span>{format(new Date(analysis.processed_at), 'MMM d, yyyy HH:mm')}</span>
+                    {analysis.conversations?.thread_id && (
+                      <Button asChild variant="outline" size="sm" className="ml-2">
+                        <a
+                          href={`https://mail.google.com/mail/u/0/?authuser=${encodeURIComponent(user?.email || '')}#inbox/${analysis.conversations.thread_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open conversation in Gmail"
+                        >
+                          Open in Gmail
+                          <ExternalLink className="h-3 w-3 ml-1" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </div>
 
