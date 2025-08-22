@@ -145,6 +145,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Parse profile for user's primary email
+    const profile = await profileResponse.json();
+    const userEmail = (profile?.emailAddress || user.email || '').toLowerCase();
+
     // If this is just a test, return success
     if (testOnly) {
       console.log('✅ Gmail API access test successful');
@@ -280,51 +284,76 @@ Deno.serve(async (req) => {
           const lastMessage = sortedMessages[sortedMessages.length - 1]
           const headers = lastMessage.payload.headers || []
 
-          // Filter out promotional/social/updates/forums and List-Unsubscribe
-          const hasBlockedLabel = (lastMessage.labelIds || []).some((id) => BLOCKED_CATEGORIES.has(id))
-          const hasListUnsubscribe = headers.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe')
-          if (hasBlockedLabel || hasListUnsubscribe) {
-            console.log(`Skipping thread ${threadData.id} due to filtered category or List-Unsubscribe header`)
+          // Thread-level filtering: skip only if ALL messages are promotional/social/updates/forums or automated
+          const threadHasOnlyBlocked = threadData.messages.every((m) => {
+            const lbl = (m.labelIds || [])
+            const hdrs = (m.payload.headers || [])
+            const hasBlocked = lbl.some((id) => BLOCKED_CATEGORIES.has(id))
+            const hasListUnsubscribe = hdrs.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe')
+            return hasBlocked || hasListUnsubscribe
+          })
+          if (threadHasOnlyBlocked) {
+            console.log(`Skipping thread ${threadData.id} because all messages are in blocked categories or automated`)
+            continue
+          }
+
+          // Collect participants across the entire thread
+          const participantsSet = new Set<string>()
+          for (const m of threadData.messages) {
+            const h = m.payload.headers || []
+            const fromH = h.find((x) => x.name === 'From')?.value || ''
+            const toH = h.find((x) => x.name === 'To')?.value || ''
+            const ccH = h.find((x) => x.name === 'Cc')?.value || ''
+            const pushList = (val: string) => {
+              if (!val) return
+              val.split(',').map((p) => p.trim()).filter(Boolean).forEach((p) => participantsSet.add(p))
+            }
+            if (fromH) participantsSet.add(fromH)
+            pushList(toH)
+            pushList(ccH)
+          }
+          const participants = Array.from(participantsSet)
+
+          // Human conversation heuristic: must include the user and at least one non-noreply participant
+          const isNoReply = (s: string) => /no[\-\s]?reply|donotreply|do[\-\s]?not[\-\s]?reply|notification|mailer-daemon|noreply/i.test(s)
+          const lowerParts = participants.map((p) => p.toLowerCase())
+          const includesUser = userEmail ? lowerParts.some((p) => p.includes(userEmail)) : true
+          const includesOtherHuman = lowerParts.some((p) => !p.includes(userEmail) && !isNoReply(p))
+          if (!includesUser || !includesOtherHuman) {
+            console.log(`Skipping thread ${threadData.id} due to not meeting human conversation criteria`)
             continue
           }
           
           const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject'
-          const from = headers.find(h => h.name === 'From')?.value || 'Unknown Sender'
-          const to = headers.find(h => h.name === 'To')?.value || ''
-          const cc = headers.find(h => h.name === 'Cc')?.value || ''
-          
-          // Extract participants (from, to, cc)
-          const participants = [] as string[]
-          if (from) participants.push(from)
-          if (to) participants.push(...to.split(',').map(p => p.trim()))
-          if (cc) participants.push(...cc.split(',').map(p => p.trim()))
-          
-          // Get message content (try payload.body first, then parts, fallback to snippet)
-          let fullContent = lastMessage.snippet || ''
 
-          // Try to get fuller content from payload.body
-          if (lastMessage.payload?.body?.data) {
+          // Build content from the last few messages for better context
+          let fullContent = ''
+          const recent = sortedMessages.slice(Math.max(0, sortedMessages.length - 3))
+          for (const msg of recent) {
+            let piece = msg.snippet || ''
             try {
-              fullContent = atob(lastMessage.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'))
-            } catch (_) {
-              // ignore
-            }
-          }
-          
-          // Try to get even fuller content from parts
-          if (lastMessage.payload?.parts) {
-            for (const part of lastMessage.payload.parts) {
-              if (part.body?.data) {
-                try {
-                  const decodedContent = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
-                  if (decodedContent.length > fullContent.length) {
-                    fullContent = decodedContent
-                  }
-                } catch (_) {
-                  // Ignore decoding errors
+              if (msg.payload?.body?.data) {
+                piece = atob(msg.payload.body.data.replace(/-/g, '+').replace(/_/g, '/')) || piece
+              }
+            } catch (_) { /* noop */ }
+            if (msg.payload?.parts) {
+              for (const part of msg.payload.parts) {
+                if (part?.body?.data) {
+                  try {
+                    const decoded = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
+                    if (decoded && decoded.length > piece.length) piece = decoded
+                  } catch (_) { /* noop */ }
                 }
               }
             }
+            if (piece) {
+              if (fullContent.length > 0) fullContent += '\n----\n'
+              fullContent += piece
+            }
+            if (fullContent.length > 10000) break
+          }
+          if (!fullContent) {
+            fullContent = lastMessage.snippet || ''
           }
 
           const conversation = {

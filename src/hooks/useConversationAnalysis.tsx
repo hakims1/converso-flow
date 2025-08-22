@@ -59,7 +59,7 @@ export function useConversationAnalysis() {
           )
         `)
         .order('last_message_date', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (convError) {
         throw convError;

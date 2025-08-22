@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     }
 
     const since_last = body.since_last !== false
-    const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(50, body.max_to_analyze)) : 10
+    const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(100, body.max_to_analyze)) : 25
     const respect_tier = body.respect_tier !== false
     const model = body.model || 'claude-3-5-haiku-20241022'
 
@@ -104,12 +104,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Fetch recent conversations (cap to 200 to compute freshness)
+    // Fetch recent conversations (cap to 300 to compute freshness)
     const { data: conversations, error: convErr } = await supabaseAuthed
       .from('conversations')
       .select('id, subject, participants, snippet, full_content, last_message_date, message_count')
       .order('last_message_date', { ascending: false })
-      .limit(200)
+      .limit(300)
 
     if (convErr) {
       console.error('Error fetching conversations:', convErr)
@@ -155,7 +155,19 @@ Deno.serve(async (req) => {
       return new Date(lp).getTime() < new Date(c.last_message_date).getTime()
     })
 
-    const toAnalyze = candidates.slice(0, maxToAnalyze)
+    // Relax selection if not enough fresh candidates: allow recently analyzed except those within last 24h
+    let toAnalyzePool = [...candidates]
+    if (toAnalyzePool.length < maxToAnalyze) {
+      const dayAgo = Date.now() - 24 * 60 * 60 * 1000
+      const relaxedPool = conversations.filter((c: any) => !toAnalyzePool.some((t) => t.id === c.id))
+      const relaxedFiltered = relaxedPool.filter((c: any) => {
+        const lp = lastProcessed.get(c.id)
+        return !lp || new Date(lp).getTime() < dayAgo
+      })
+      toAnalyzePool = [...toAnalyzePool, ...relaxedFiltered]
+    }
+
+    const toAnalyze = toAnalyzePool.slice(0, maxToAnalyze)
 
     const results: AnalysisResult[] = []
     let processed = 0
