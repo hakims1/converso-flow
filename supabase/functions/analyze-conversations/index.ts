@@ -92,12 +92,21 @@ Deno.serve(async (req) => {
 
     const isFree = (history?.subscription_tier ?? 'free') === 'free'
 
-    // Fetch recent conversations (cap to 300 to compute freshness)
-    const { data: conversations, error: convErr } = await supabaseAuthed
+    // For free users: only analyze conversations from last 60 days
+    const cutoffDate = isFree ? new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString() : null
+    
+    // Fetch conversations with tier-based filtering
+    let query = supabaseAuthed
       .from('conversations')
       .select('id, subject, participants, snippet, full_content, last_message_date, message_count')
       .order('last_message_date', { ascending: false })
-      .limit(300)
+      .limit(1000)
+    
+    if (cutoffDate) {
+      query = query.gte('last_message_date', cutoffDate)
+    }
+
+    const { data: conversations, error: convErr } = await query
 
     if (convErr) {
       console.error('Error fetching conversations:', convErr)
@@ -108,7 +117,11 @@ Deno.serve(async (req) => {
     }
 
     if (!conversations || conversations.length === 0) {
-      return new Response(JSON.stringify({ success: false, error: 'NO_CONVERSATIONS' }), {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'NO_CONVERSATIONS',
+        message: isFree ? 'No conversations found in the last 60 days' : 'No conversations found'
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
@@ -143,19 +156,9 @@ Deno.serve(async (req) => {
       return new Date(lp).getTime() < new Date(c.last_message_date).getTime()
     })
 
-    // Relax selection if not enough fresh candidates: allow recently analyzed except those within last 24h
-    let toAnalyzePool = [...candidates]
-    if (toAnalyzePool.length < maxToAnalyze) {
-      const dayAgo = Date.now() - 24 * 60 * 60 * 1000
-      const relaxedPool = conversations.filter((c: any) => !toAnalyzePool.some((t) => t.id === c.id))
-      const relaxedFiltered = relaxedPool.filter((c: any) => {
-        const lp = lastProcessed.get(c.id)
-        return !lp || new Date(lp).getTime() < dayAgo
-      })
-      toAnalyzePool = [...toAnalyzePool, ...relaxedFiltered]
-    }
-
-    const toAnalyze = toAnalyzePool.slice(0, maxToAnalyze)
+    // For free users, analyze ALL conversations within the 60-day window
+    // For paid users, use the standard since_last logic
+    const toAnalyze = isFree ? conversations.slice(0, requestedMax) : candidates.slice(0, requestedMax)
 
     const results: AnalysisResult[] = []
     let processed = 0
