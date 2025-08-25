@@ -53,7 +53,9 @@ export const useGmail = () => {
         },
         body: {
           access_token: session.provider_token ?? '',
-          full_history: true,
+          full_history: false,
+          since_days: 60,
+          max_threads: 75,
         },
       });
 

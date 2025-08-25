@@ -91,9 +91,9 @@ Deno.serve(async (req) => {
     }
     // Controls for sync scope
     const _b: any = body || {};
-    const fullHistory = typeof _b.full_history === 'boolean' ? _b.full_history : true;
-    const sinceDays = typeof _b.since_days === 'number' ? Math.max(0, _b.since_days) : 0;
-    const maxThreads = typeof _b.max_threads === 'number' ? Math.max(0, _b.max_threads) : 0;
+    const fullHistory = typeof _b.full_history === 'boolean' ? _b.full_history : false;
+    const sinceDays = typeof _b.since_days === 'number' ? Math.max(0, _b.since_days) : 30;
+    const maxThreads = typeof _b.max_threads === 'number' ? Math.max(0, _b.max_threads) : 75;
 
     // Fallback: try to get from headers if not in body
     if (!accessToken) {
@@ -228,9 +228,9 @@ Deno.serve(async (req) => {
       for (const thread of threads) {
         try {
           // Add delay to avoid rate limiting
-          if (processedCount > 0 && processedCount % 10 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay every 10 requests
-          }
+            if (processedCount > 0 && processedCount % 10 === 0) {
+              await new Promise(resolve => setTimeout(resolve, 200)) // 200ms delay every 10 requests
+            }
 
           // Fetch full thread details
           const threadResponse = await fetch(
