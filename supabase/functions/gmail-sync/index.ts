@@ -170,12 +170,13 @@ Deno.serve(async (req) => {
     const defaultDays = 30;
     const days = fullHistory ? 0 : (sinceDays > 0 ? sinceDays : defaultDays);
     const afterUnix = days > 0 ? Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000) : 0;
+    const targetMatches = maxThreads;
 
     // Paginate through all threads
     const threads: Array<{ id: string }> = [];
     let pageToken: string | undefined = undefined;
     const perPage = 100;
-    const cap = maxThreads > 0 ? maxThreads : 5000; // safety cap
+    const cap = 5000; // collect ample threads; final stored limited by target
 
     do {
       const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/threads');
@@ -290,45 +291,48 @@ Deno.serve(async (req) => {
           const participants = Array.from(participantsSet)
 
           // Ingestion heuristic: ensure the user is part of the thread; don't over-filter
-          const isNoReply = (s: string) => /no[\-\s]?reply|donotreply|do[\-\s]?not[\-\s]?reply|notification|mailer-daemon|noreply/i.test(s)
-          const lowerParts = participants.map((p) => p.toLowerCase())
-          const includesUser = userEmail ? lowerParts.some((p) => p.includes(userEmail)) : true
-          if (!includesUser) {
-            console.log(`Skipping thread ${threadData.id} because it doesn't include the user`)
-            continue
-          }
           
           const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject'
 
-          // Build content from the last few messages for better context
+          // Extract full content from the final message only
           let fullContent = ''
-          const recent = sortedMessages.slice(Math.max(0, sortedMessages.length - 3))
-          for (const msg of recent) {
-            let piece = msg.snippet || ''
-            try {
-              if (msg.payload?.body?.data) {
-                piece = atob(msg.payload.body.data.replace(/-/g, '+').replace(/_/g, '/')) || piece
+          const decode = (b64: string) => {
+            try { return atob(b64.replace(/-/g, '+').replace(/_/g, '/')) } catch { return '' }
+          }
+          const prefer = (current: string, next: string) => {
+            if (!next) return current
+            if (!current) return next
+            return next.length > current.length ? next : current
+          }
+
+          if (lastMessage.payload?.body?.data) {
+            fullContent = decode(lastMessage.payload.body.data)
+          }
+          if (Array.isArray(lastMessage.payload?.parts)) {
+            for (const part of lastMessage.payload.parts) {
+              const data = (part as any)?.body?.data
+              if (data) {
+                const decoded = decode(data)
+                fullContent = prefer(fullContent, decoded)
               }
-            } catch (_) { /* noop */ }
-            if (msg.payload?.parts) {
-              for (const part of msg.payload.parts) {
-                if (part?.body?.data) {
-                  try {
-                    const decoded = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'))
-                    if (decoded && decoded.length > piece.length) piece = decoded
-                  } catch (_) { /* noop */ }
+              const subparts = (part as any)?.parts
+              if (Array.isArray(subparts)) {
+                for (const sub of subparts) {
+                  const d2 = (sub as any)?.body?.data
+                  if (d2) {
+                    const dec2 = decode(d2)
+                    fullContent = prefer(fullContent, dec2)
+                  }
                 }
               }
             }
-            if (piece) {
-              if (fullContent.length > 0) fullContent += '\n----\n'
-              fullContent += piece
-            }
-            if (fullContent.length > 10000) break
           }
           if (!fullContent) {
             fullContent = lastMessage.snippet || ''
           }
+          // Strip basic HTML tags for safe text display
+          const stripTags = (html: string) => html.replace(/<[^>]*>/g, '')
+          fullContent = stripTags(fullContent)
 
           const conversation = {
             user_id: user.id,
@@ -348,7 +352,9 @@ Deno.serve(async (req) => {
 
           conversations.push(conversation)
           processedCount++
-          
+          if (targetMatches > 0 && processedCount >= targetMatches) {
+            break
+          }
         } catch (error) {
           console.error(`Error processing thread ${thread.id}:`, error)
           continue
@@ -385,6 +391,7 @@ Deno.serve(async (req) => {
           from: c.participants[0] || '',
           date: c.last_message_date,
           snippet: c.snippet,
+          content: c.full_content,
           labels: c.labels || []
         })),
         totalCount: processedCount,

@@ -10,6 +10,7 @@ export interface GmailMessage {
   from: string;
   date: string;
   snippet: string;
+  content: string;
   labels: string[];
 }
 

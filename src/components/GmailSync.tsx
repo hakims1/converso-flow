@@ -149,9 +149,9 @@ const GmailSync = () => {
                       <h4 className="font-medium text-foreground mb-2 truncate">
                         {message.subject}
                       </h4>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {message.snippet}
-                      </p>
+                      <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                        {message.content}
+                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
