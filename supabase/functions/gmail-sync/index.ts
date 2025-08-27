@@ -30,7 +30,7 @@ const getThirtyDaysAgo = () => {
   return Math.floor(thirtyDaysAgo.getTime() / 1000)
 }
 
-const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES','CATEGORY_FORUMS']);
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_FORUMS']);
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -181,7 +181,12 @@ Deno.serve(async (req) => {
     do {
       const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/threads');
       url.searchParams.set('maxResults', String(perPage));
-      if (afterUnix > 0) url.searchParams.set('q', `after:${afterUnix}`);
+      // Build Gmail search query: since date and exclude promotional/social/forums categories
+      const qParts: string[] = [];
+      if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
+      // Exclude blocked categories to widen useful results, but keep Updates allowed
+      qParts.push('-category:{promotions social forums}');
+      if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
       const resp = await fetch(url.toString(), {
@@ -260,8 +265,9 @@ Deno.serve(async (req) => {
           const lastMessage = sortedMessages[sortedMessages.length - 1]
           const headers = lastMessage.payload.headers || []
 
-          // Thread-level filtering: skip only if ALL messages are promotional/social/updates/forums or automated
-          const threadHasOnlyBlocked = threadData.messages.every((m) => {
+          // Thread-level filtering: skip only if ALL messages are promotional/social/forums or automated
+          const threadHasInbox = threadData.messages.some((m) => (m.labelIds || []).includes('INBOX'))
+          const threadHasOnlyBlocked = !threadHasInbox && threadData.messages.every((m) => {
             const lbl = (m.labelIds || [])
             const hdrs = (m.payload.headers || [])
             const hasBlocked = lbl.some((id) => BLOCKED_CATEGORIES.has(id))
@@ -341,7 +347,7 @@ Deno.serve(async (req) => {
             subject,
             participants: participants.filter(Boolean),
             snippet: lastMessage.snippet,
-            full_content: fullContent.substring(0, 10000), // Limit to 10k chars
+            full_content: fullContent,
             last_message_date: new Date(parseInt(lastMessage.internalDate)).toISOString(),
             message_count: threadData.messages.length,
             labels: lastMessage.labelIds || [],
