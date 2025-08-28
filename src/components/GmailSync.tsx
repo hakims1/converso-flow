@@ -180,7 +180,9 @@ const GmailSync = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {messages.map(message => <div key={message.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+              {messages
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map(message => <div key={message.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
