@@ -24,33 +24,52 @@ const GmailSync = () => {
 
   // Use centralized permission checking
   const showReauthButton = gmailPermissions.needsReauth;
+  
   const handleSync = async () => {
-    await syncGmail();
-    setHasInitialSync(true);
+    if (gmailPermissions.needsReauth) {
+      console.log('🔄 Re-authenticating with Gmail...');
+      await signInWithGoogle(true); // Force re-auth
+    } else {
+      console.log('📧 Starting Gmail sync...');
+      await syncGmail();
+      setHasInitialSync(true);
+    }
   };
 
-  // Check permissions on initial load
+  const handleRefreshPermissions = async () => {
+    console.log('🔄 Manually refreshing Gmail permissions...');
+    await gmailPermissions.checkPermissions(true); // Force check
+  };
+
+  // Perform soft check on component mount to avoid aggressive re-auth
   useEffect(() => {
-    if (session && !gmailPermissions.isChecking) {
-      console.log('📧 Checking Gmail permissions on component mount...');
-      gmailPermissions.checkPermissions();
+    if (session) {
+      console.log('🔄 Performing initial soft permission check...');
+      gmailPermissions.softCheckPermissions();
     }
   }, [session]);
 
-  // Auto-sync when permissions are available
+  // Only check permissions occasionally if there are actual issues
   useEffect(() => {
-    if (gmailPermissions.hasPermissions && !hasInitialSync && !loading) {
-      console.log('🚀 Auto-syncing Gmail conversations...');
-      syncGmail();
-      setHasInitialSync(true);
+    // Only set up periodic checking if we don't have permissions and need reauth
+    if (session && gmailPermissions.needsReauth) {
+      console.log('⏰ Setting up periodic permission check due to reauth needed');
+      const interval = setInterval(() => {
+        if (!gmailPermissions.isChecking) {
+          gmailPermissions.softCheckPermissions();
+        }
+      }, 10 * 60 * 1000); // Check every 10 minutes only if we need reauth
+
+      return () => clearInterval(interval);
     }
-  }, [gmailPermissions.hasPermissions, hasInitialSync, loading, syncGmail]);
+  }, [session, gmailPermissions.needsReauth, gmailPermissions.isChecking]);
 
   // Re-check permissions when returning from OAuth (focus/visibility)
   useEffect(() => {
     const onFocus = () => {
       if (gmailPermissions.needsReauth) {
-        gmailPermissions.checkPermissions();
+        console.log('🔄 Window focus detected, soft checking permissions...');
+        gmailPermissions.softCheckPermissions();
       }
     };
     window.addEventListener('focus', onFocus);
@@ -78,15 +97,23 @@ const GmailSync = () => {
               Gmail Sync
             </CardTitle>
             <CardDescription>
-              Sync your Gmail conversations to analyze them
+              Connect your Gmail account to analyze your email conversations
+              {gmailPermissions.lastChecked && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  Last checked: {formatDate(gmailPermissions.lastChecked)}
+                </div>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {showReauthButton && (
-              <Alert>
+              <Alert className="border-amber-200 bg-amber-50">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Gmail permissions need to be renewed. Please re-authenticate to continue syncing.
+                <AlertDescription className="space-y-2">
+                  <p>Gmail permissions need to be renewed. Please re-authenticate to continue syncing.</p>
+                  {gmailPermissions.error && (
+                    <p className="text-xs text-muted-foreground">Error: {gmailPermissions.error}</p>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
@@ -96,28 +123,44 @@ const GmailSync = () => {
                 <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">Checking Gmail permissions...</p>
               </div>
-            ) : showReauthButton ? (
-              <Button onClick={() => signInWithGoogle(true)} className="w-full">
-                Re-authenticate with Gmail
-              </Button>
             ) : (
-              <Button 
-                onClick={handleSync} 
-                disabled={loading || !session}
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Syncing Gmail...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Sync Gmail Conversations
-                  </>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleSync}
+                  disabled={loading || gmailPermissions.isChecking}
+                  className="flex-1 gradient-primary text-white border-0"
+                >
+                  {loading || gmailPermissions.isChecking ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      {gmailPermissions.isChecking ? 'Checking permissions...' : 'Syncing emails...'}
+                    </>
+                  ) : gmailPermissions.needsReauth ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Re-authenticate Gmail
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Sync Gmail
+                    </>
+                  )}
+                </Button>
+                
+                {gmailPermissions.hasPermissions && (
+                  <Button 
+                    onClick={handleRefreshPermissions}
+                    disabled={gmailPermissions.isChecking}
+                    variant="outline"
+                    size="sm"
+                    className="px-3"
+                    title="Refresh Gmail permissions"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
                 )}
-              </Button>
+              </div>
             )}
             
             {totalCount > 0 && (

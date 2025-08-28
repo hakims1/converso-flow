@@ -3,11 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Search, Filter, MessageSquare, Calendar, User } from "lucide-react";
+import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock } from "lucide-react";
 import { useAnalysis } from "@/hooks/useAnalysis";
+import { useConversations } from "@/hooks/useConversations";
+import { formatDistanceToNow } from 'date-fns';
 
 export function Conversations() {
   const analysis = useAnalysis();
+  const { conversations, loading, error, refetch } = useConversations();
   const handleAnalyze = () => analysis.analyzeConversations({ max: 10, sinceLast: true });
   return (
     <div className="space-y-6">
@@ -93,22 +96,81 @@ export function Conversations() {
         <CardHeader>
           <CardTitle>Recent Conversations</CardTitle>
           <CardDescription>
-            Your most recent email conversations
+            {conversations.length > 0 
+              ? `Showing ${conversations.length} recent email conversations`
+              : 'Your most recent email conversations'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12">
-            <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Conversations Yet</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Connect your Gmail account to see your conversations here. 
-              We'll analyze your recent emails and provide AI-powered insights.
-            </p>
-            <Button className="gradient-primary text-white border-0">
-              <Mail className="mr-2 h-4 w-4" />
-              Connect Gmail Account
-            </Button>
-          </div>
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading conversations...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <Mail className="mx-auto h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Error Loading Conversations</h3>
+              <p className="text-muted-foreground mb-6">{error}</p>
+              <Button onClick={refetch} variant="outline">
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Try Again
+              </Button>
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="text-center py-12">
+              <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Conversations Yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                Connect your Gmail account to see your conversations here. 
+                We'll analyze your recent emails and provide AI-powered insights.
+              </p>
+              <Button className="gradient-primary text-white border-0">
+                <Mail className="mr-2 h-4 w-4" />
+                Connect Gmail Account
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {conversations.map((conversation) => (
+                <div key={conversation.id} className="border rounded-lg p-4 space-y-3 hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <User className="h-8 w-8 text-muted-foreground" />
+                      <div>
+                        <div className="font-medium">{conversation.participants[0] || 'Unknown'}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {conversation.participants.length > 1 
+                            ? `+${conversation.participants.length - 1} others`
+                            : conversation.participants[0]
+                          }
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="secondary">Email</Badge>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {formatDistanceToNow(new Date(conversation.last_message_date), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-medium mb-1">{conversation.subject}</div>
+                    <div className="text-muted-foreground line-clamp-2">
+                      {conversation.snippet}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                    <span>{conversation.message_count} message{conversation.message_count !== 1 ? 's' : ''}</span>
+                    <span>•</span>
+                    <span>Thread ID: {conversation.thread_id}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
