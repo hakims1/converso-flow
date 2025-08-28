@@ -71,41 +71,34 @@ const Auth = () => {
     }
   }, [gmailPermissions.hasPermissions, user, session, navigate]);
 
-  // Handle OAuth callback with improved session handling
+  // Handle OAuth callback with explicit PKCE code exchange for robust session persistence
   useEffect(() => {
     const handleAuthCallback = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const state = urlParams.get('state');
-      
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+
       if (code && state) {
         console.log('🔗 OAuth callback detected');
-        
         try {
-          // Wait a moment for Supabase to process the OAuth callback
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Get the latest session after OAuth
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          
-          if (currentSession?.provider_token) {
-            console.log('✅ OAuth session established with provider token');
-            
-            // Clear URL parameters
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            // Clear OAuth attempt flag since we got a valid session
-            localStorage.removeItem('gmail_oauth_attempted');
-            
-            console.log('🔍 Testing Gmail permissions after OAuth...');
-            // Always check permissions after OAuth to validate scopes
-            await gmailPermissions.checkPermissions();
-            
-          } else {
-            console.log('❌ OAuth callback but no provider token found');
-            localStorage.removeItem('gmail_oauth_attempted');
-            localStorage.removeItem('gmail_reauth_for_permissions');
-          }
+          // Explicitly exchange the authorization code for a session (more reliable across environments)
+          const { data, error } = await supabase.auth.exchangeCodeForSession(url.href);
+          if (error) throw error;
+
+          console.log('✅ Session exchanged via PKCE', {
+            hasSession: !!data.session,
+            provider_token: !!data.session?.provider_token,
+          });
+
+          // Clean URL parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+
+          // Clear OAuth attempt flag since we got a valid session
+          localStorage.removeItem('gmail_oauth_attempted');
+
+          console.log('🔍 Testing Gmail permissions after OAuth...');
+          // Always check permissions after OAuth to validate scopes
+          await gmailPermissions.checkPermissions();
         } catch (error) {
           console.error('❌ OAuth callback error:', error);
           localStorage.removeItem('gmail_oauth_attempted');
