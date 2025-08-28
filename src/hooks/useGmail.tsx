@@ -12,6 +12,7 @@ export interface GmailMessage {
   snippet: string;
   content: string;
   labels: string[];
+  url: string;
 }
 
 export interface GmailSyncResponse {
@@ -56,7 +57,7 @@ export const useGmail = () => {
           access_token: session.provider_token ?? '',
           full_history: false,
           since_days: 60,
-          max_threads: 75,
+          max_threads: 50,
         },
       });
 

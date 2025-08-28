@@ -30,7 +30,7 @@ const getThirtyDaysAgo = () => {
   return Math.floor(thirtyDaysAgo.getTime() / 1000)
 }
 
-const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_FORUMS','CATEGORY_UPDATES']);
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES']);
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
     const defaultDays = 30;
     const days = fullHistory ? 0 : (sinceDays > 0 ? sinceDays : defaultDays);
     const afterUnix = days > 0 ? Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000) : 0;
-    const targetMatches = maxThreads;
+    const targetMatches = 50;
 
     // Paginate through all threads
     const threads: Array<{ id: string }> = [];
@@ -181,11 +181,11 @@ Deno.serve(async (req) => {
     do {
       const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/threads');
       url.searchParams.set('maxResults', String(perPage));
-      // Build Gmail search query: since date and exclude promotional/social/forums categories
+      // Build Gmail search query: since date and exclude categories (promotions, social, updates)
       const qParts: string[] = [];
       if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
-      // Exclude blocked categories and restrict to Inbox only
-      qParts.push('-category:{promotions social forums updates}', 'in:inbox');
+      // Exclude blocked categories
+      qParts.push('-category:promotions', '-category:social', '-category:updates');
       if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
@@ -264,6 +264,7 @@ Deno.serve(async (req) => {
           const sortedMessages = [...threadData.messages].sort((a, b) => Number(a.internalDate) - Number(b.internalDate))
           const lastMessage = sortedMessages[sortedMessages.length - 1]
           const headers = lastMessage.payload.headers || []
+          const lastLabels = lastMessage.labelIds || []
 
           // Thread-level filtering: skip only if ALL messages are promotional/social/forums or automated
           // Extract clean text from the final message and apply strict filters
@@ -318,14 +319,12 @@ Deno.serve(async (req) => {
 
           const fullContent = collectText(lastMessage);
 
-          const lastLabels = lastMessage.labelIds || [];
-          const inInbox = lastLabels.includes('INBOX');
-          const hasBlockedLabel = lastLabels.some((id) => BLOCKED_CATEGORIES.has(id));
-          const hasListUnsubscribe = headers.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe');
-          const hasUnsubscribeInContent = /unsubscribe|opt\s*out|manage (your )?preferences/i.test(fullContent);
+          // Apply strict thread-level filters per requirements
+          const blockedInAnyMessage = threadData.messages.some(m => (m.labelIds || []).some(id => BLOCKED_CATEGORIES.has(id)));
+          const listUnsubInAnyMessage = threadData.messages.some(m => (m.payload.headers || []).some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'));
 
-          if (!inInbox || hasBlockedLabel || hasListUnsubscribe || hasUnsubscribeInContent) {
-            console.log(`Skipping thread ${threadData.id} due to filters`, { inInbox, hasBlockedLabel, hasListUnsubscribe, hasUnsubscribeInContent, labels: lastLabels });
+          if (blockedInAnyMessage || listUnsubInAnyMessage) {
+            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage });
             continue;
           }
 
@@ -406,7 +405,8 @@ Deno.serve(async (req) => {
           date: c.last_message_date,
           snippet: c.snippet,
           content: c.full_content,
-          labels: c.labels || []
+          labels: c.labels || [],
+          url: `https://mail.google.com/mail/u/0/#inbox/${c.thread_id}`
         })),
         totalCount: processedCount,
         message: `Successfully processed ${processedCount} email conversations`

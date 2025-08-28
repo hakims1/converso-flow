@@ -192,6 +192,17 @@ const GmailSync = () => {
                       <h4 className="font-medium text-foreground mb-2 truncate">
                         {message.subject}
                       </h4>
+                      {message.url && (
+                        <a
+                          href={message.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-primary hover:underline mb-2 block"
+                          aria-label="View this conversation in Gmail"
+                        >
+                          View in Gmail
+                        </a>
+                      )}
                       <div className="text-sm text-muted-foreground whitespace-pre-wrap">
                         {message.content}
                       </div>
