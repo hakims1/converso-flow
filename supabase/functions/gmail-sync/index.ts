@@ -30,7 +30,7 @@ const getThirtyDaysAgo = () => {
   return Math.floor(thirtyDaysAgo.getTime() / 1000)
 }
 
-const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_FORUMS']);
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_FORUMS','CATEGORY_UPDATES']);
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -184,8 +184,8 @@ Deno.serve(async (req) => {
       // Build Gmail search query: since date and exclude promotional/social/forums categories
       const qParts: string[] = [];
       if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
-      // Exclude blocked categories to widen useful results, but keep Updates allowed
-      qParts.push('-category:{promotions social forums}');
+      // Exclude blocked categories and restrict to Inbox only
+      qParts.push('-category:{promotions social forums updates}', 'in:inbox');
       if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
@@ -266,79 +266,87 @@ Deno.serve(async (req) => {
           const headers = lastMessage.payload.headers || []
 
           // Thread-level filtering: skip only if ALL messages are promotional/social/forums or automated
-          const threadHasInbox = threadData.messages.some((m) => (m.labelIds || []).includes('INBOX'))
-          const threadHasOnlyBlocked = !threadHasInbox && threadData.messages.every((m) => {
-            const lbl = (m.labelIds || [])
-            const hdrs = (m.payload.headers || [])
-            const hasBlocked = lbl.some((id) => BLOCKED_CATEGORIES.has(id))
-            const hasListUnsubscribe = hdrs.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe')
-            return hasBlocked || hasListUnsubscribe
-          })
-          if (threadHasOnlyBlocked) {
-            console.log(`Skipping thread ${threadData.id} because all messages are in blocked categories or automated`)
-            continue
+          // Extract clean text from the final message and apply strict filters
+          const decode = (b64: string) => { try { return atob(b64.replace(/-/g, '+').replace(/_/g, '/')) } catch { return '' } };
+          const htmlToText = (html: string) => {
+            if (!html) return '';
+            html = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
+            html = html.replace(/<(br|BR)\s*\/?>(?=\n|\r|$)/g, '\n').replace(/<(br|BR)\s*\/?>(?!\n)/g, '\n');
+            html = html.replace(/<\/?p[^>]*>/gi, '\n');
+            html = html.replace(/<[^>]+>/g, '');
+            html = html.replace(/&nbsp;/g, ' ')
+                       .replace(/&amp;/g, '&')
+                       .replace(/&lt;/g, '<')
+                       .replace(/&gt;/g, '>')
+                       .replace(/&quot;/g, '"')
+                       .replace(/&#39;/g, "'");
+            html = html.replace(/&#(\d+);/g, (_: string, code: string) => {
+              try { return String.fromCharCode(parseInt(code)); } catch { return _; }
+            });
+            return html.split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+          };
+          const prefer = (a: string, b: string) => (!a || (b && b.length > a.length)) ? b : a;
+
+          const collectText = (msg: GmailMessage) => {
+            let textPlain = '';
+            let textHtml = '';
+            const pushData = (mime: string | undefined, data?: string) => {
+              if (!data) return;
+              const decoded = decode(data);
+              if (!decoded) return;
+              if (mime && mime.toLowerCase().includes('text/plain')) {
+                textPlain = prefer(textPlain, decoded);
+              } else if (mime && mime.toLowerCase().includes('text/html')) {
+                textHtml = prefer(textHtml, decoded);
+              } else {
+                textHtml = prefer(textHtml, decoded);
+              }
+            };
+            const topMime = (lastMessage as any)?.payload?.mimeType as string | undefined;
+            pushData(topMime, msg.payload?.body?.data);
+            const walk = (parts?: Array<any>) => {
+              if (!Array.isArray(parts)) return;
+              for (const p of parts) {
+                pushData(p?.mimeType, p?.body?.data);
+                if (Array.isArray(p?.parts)) walk(p.parts);
+              }
+            };
+            walk(msg.payload?.parts as any);
+            const content = textPlain || htmlToText(textHtml) || msg.snippet || '';
+            return content;
+          };
+
+          const fullContent = collectText(lastMessage);
+
+          const lastLabels = lastMessage.labelIds || [];
+          const inInbox = lastLabels.includes('INBOX');
+          const hasBlockedLabel = lastLabels.some((id) => BLOCKED_CATEGORIES.has(id));
+          const hasListUnsubscribe = headers.some((h) => (h.name || '').toLowerCase() === 'list-unsubscribe');
+          const hasUnsubscribeInContent = /unsubscribe|opt\s*out|manage (your )?preferences/i.test(fullContent);
+
+          if (!inInbox || hasBlockedLabel || hasListUnsubscribe || hasUnsubscribeInContent) {
+            console.log(`Skipping thread ${threadData.id} due to filters`, { inInbox, hasBlockedLabel, hasListUnsubscribe, hasUnsubscribeInContent, labels: lastLabels });
+            continue;
           }
 
-          // Collect participants across the entire thread
-          const participantsSet = new Set<string>()
+          // Collect participants across the entire thread (after filters pass)
+          const participantsSet = new Set<string>();
           for (const m of threadData.messages) {
-            const h = m.payload.headers || []
-            const fromH = h.find((x) => x.name === 'From')?.value || ''
-            const toH = h.find((x) => x.name === 'To')?.value || ''
-            const ccH = h.find((x) => x.name === 'Cc')?.value || ''
+            const h = m.payload.headers || [];
+            const fromH = h.find((x) => x.name === 'From')?.value || '';
+            const toH = h.find((x) => x.name === 'To')?.value || '';
+            const ccH = h.find((x) => x.name === 'Cc')?.value || '';
             const pushList = (val: string) => {
-              if (!val) return
-              val.split(',').map((p) => p.trim()).filter(Boolean).forEach((p) => participantsSet.add(p))
-            }
-            if (fromH) participantsSet.add(fromH)
-            pushList(toH)
-            pushList(ccH)
+              if (!val) return;
+              val.split(',').map((p) => p.trim()).filter(Boolean).forEach((p) => participantsSet.add(p));
+            };
+            if (fromH) participantsSet.add(fromH);
+            pushList(toH);
+            pushList(ccH);
           }
-          const participants = Array.from(participantsSet)
+          const participants = Array.from(participantsSet);
 
-          // Ingestion heuristic: ensure the user is part of the thread; don't over-filter
-          
-          const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject'
-
-          // Extract full content from the final message only
-          let fullContent = ''
-          const decode = (b64: string) => {
-            try { return atob(b64.replace(/-/g, '+').replace(/_/g, '/')) } catch { return '' }
-          }
-          const prefer = (current: string, next: string) => {
-            if (!next) return current
-            if (!current) return next
-            return next.length > current.length ? next : current
-          }
-
-          if (lastMessage.payload?.body?.data) {
-            fullContent = decode(lastMessage.payload.body.data)
-          }
-          if (Array.isArray(lastMessage.payload?.parts)) {
-            for (const part of lastMessage.payload.parts) {
-              const data = (part as any)?.body?.data
-              if (data) {
-                const decoded = decode(data)
-                fullContent = prefer(fullContent, decoded)
-              }
-              const subparts = (part as any)?.parts
-              if (Array.isArray(subparts)) {
-                for (const sub of subparts) {
-                  const d2 = (sub as any)?.body?.data
-                  if (d2) {
-                    const dec2 = decode(d2)
-                    fullContent = prefer(fullContent, dec2)
-                  }
-                }
-              }
-            }
-          }
-          if (!fullContent) {
-            fullContent = lastMessage.snippet || ''
-          }
-          // Strip basic HTML tags for safe text display
-          const stripTags = (html: string) => html.replace(/<[^>]*>/g, '')
-          fullContent = stripTags(fullContent)
+          const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
 
           const conversation = {
             user_id: user.id,
@@ -350,10 +358,11 @@ Deno.serve(async (req) => {
             full_content: fullContent,
             last_message_date: new Date(parseInt(lastMessage.internalDate)).toISOString(),
             message_count: threadData.messages.length,
-            labels: lastMessage.labelIds || [],
+            labels: lastLabels,
             has_attachments: lastMessage.payload.parts?.some(part => 
               part.filename && part.filename.length > 0
             ) || false
+          }
           }
 
           conversations.push(conversation)
