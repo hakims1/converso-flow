@@ -363,7 +363,6 @@ Deno.serve(async (req) => {
               part.filename && part.filename.length > 0
             ) || false
           }
-          }
 
           conversations.push(conversation)
           processedCount++
