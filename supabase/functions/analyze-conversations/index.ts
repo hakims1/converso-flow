@@ -95,10 +95,11 @@ Deno.serve(async (req) => {
     // For free users: only analyze conversations from last 60 days
     const cutoffDate = isFree ? new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString() : null
     
-    // Fetch conversations with tier-based filtering
+    // Fetch conversations with tier-based filtering - only analyze conversations that exist in user's database
     let query = supabaseAuthed
       .from('conversations')
-      .select('id, subject, participants, snippet, full_content, last_message_date, message_count')
+      .select('id, subject, participants, snippet, full_content, last_message_date, message_count, user_id')
+      .eq('user_id', user.id) // CRITICAL: Only analyze conversations belonging to this user
       .order('last_message_date', { ascending: false })
       .limit(1000)
     
