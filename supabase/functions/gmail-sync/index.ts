@@ -184,8 +184,8 @@ Deno.serve(async (req) => {
       // Build Gmail search query: since date and exclude categories (promotions, social, updates)
       const qParts: string[] = [];
       if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
-      // Exclude blocked categories
-      qParts.push('-category:promotions', '-category:social', '-category:updates');
+      // Exclude blocked categories and no-reply/reply senders
+      qParts.push('-category:promotions', '-category:social', '-category:updates', '-from:reply');
       if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
@@ -322,9 +322,18 @@ Deno.serve(async (req) => {
           // Apply strict thread-level filters per requirements
           const blockedInAnyMessage = threadData.messages.some(m => (m.labelIds || []).some(id => BLOCKED_CATEGORIES.has(id)));
           const listUnsubInAnyMessage = threadData.messages.some(m => (m.payload.headers || []).some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'));
+          const hasReplyInAddress = (fromValue: string) => {
+            if (!fromValue) return false;
+            const emails = fromValue.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+            return emails.some((e) => e.toLowerCase().includes('reply'));
+          };
+          const replySenderInAnyMessage = threadData.messages.some(m => {
+            const fromVal = (m.payload.headers || []).find(h => (h.name || '').toLowerCase() === 'from')?.value || '';
+            return hasReplyInAddress(fromVal);
+          });
 
-          if (blockedInAnyMessage || listUnsubInAnyMessage) {
-            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage });
+          if (blockedInAnyMessage || listUnsubInAnyMessage || replySenderInAnyMessage) {
+            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage, replySenderInAnyMessage });
             continue;
           }
 
