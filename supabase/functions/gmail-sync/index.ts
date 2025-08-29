@@ -303,7 +303,7 @@ Deno.serve(async (req) => {
                 textHtml = prefer(textHtml, decoded);
               }
             };
-            const topMime = (lastMessage as any)?.payload?.mimeType as string | undefined;
+            const topMime = (msg as any)?.payload?.mimeType as string | undefined;
             pushData(topMime, msg.payload?.body?.data);
             const walk = (parts?: Array<any>) => {
               if (!Array.isArray(parts)) return;
@@ -331,9 +331,36 @@ Deno.serve(async (req) => {
             const fromVal = (m.payload.headers || []).find(h => (h.name || '').toLowerCase() === 'from')?.value || '';
             return hasReplyInAddress(fromVal);
           });
+          // Detect "unsubscribe" keyword within text/plain or text/html parts
+          const unsubscribeInBodyInAnyMessage = threadData.messages.some((m) => {
+            let plain = '';
+            let html = '';
+            const pushData = (mime?: string, data?: string) => {
+              if (!data) return;
+              const decoded = decode(data);
+              if (!decoded) return;
+              if (mime && mime.toLowerCase().includes('text/plain')) {
+                plain = prefer(plain, decoded);
+              } else if (mime && mime.toLowerCase().includes('text/html')) {
+                html = prefer(html, decoded);
+              }
+            };
+            const topMime = (m as any)?.payload?.mimeType as string | undefined;
+            pushData(topMime, m.payload?.body?.data);
+            const walk = (parts?: Array<any>) => {
+              if (!Array.isArray(parts)) return;
+              for (const p of parts) {
+                pushData(p?.mimeType, p?.body?.data);
+                if (Array.isArray(p?.parts)) walk(p.parts);
+              }
+            };
+            walk(m.payload?.parts as any);
+            const hasUnsub = plain.toLowerCase().includes('unsubscribe') || htmlToText(html).toLowerCase().includes('unsubscribe');
+            return hasUnsub;
+          });
 
-          if (blockedInAnyMessage || listUnsubInAnyMessage || replySenderInAnyMessage) {
-            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage, replySenderInAnyMessage });
+          if (blockedInAnyMessage || listUnsubInAnyMessage || replySenderInAnyMessage || unsubscribeInBodyInAnyMessage) {
+            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage, replySenderInAnyMessage, unsubscribeInBodyInAnyMessage });
             continue;
           }
 
