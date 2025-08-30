@@ -201,13 +201,15 @@ Deno.serve(async (req) => {
 
         const row = mapToRow(conv.id, parsed)
 
-        const { error: insertErr } = await supabaseAuthed
-          .from('conversation_analysis')
-          .insert(row)
+        const upsertRow = { ...row, processed_at: new Date().toISOString() }
 
-        if (insertErr) {
-          console.error('Insert error:', insertErr)
-          results.push({ conversation_id: conv.id, success: false, error_code: 'DB_WRITE_ERROR', error_message: insertErr.message })
+        const { error: upsertErr } = await supabaseAuthed
+          .from('conversation_analysis')
+          .upsert(upsertRow, { onConflict: 'conversation_id' })
+
+        if (upsertErr) {
+          console.error('Upsert error:', upsertErr)
+          results.push({ conversation_id: conv.id, success: false, error_code: 'DB_WRITE_ERROR', error_message: upsertErr.message })
           continue
         }
 
