@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock } from "lucide-react";
+import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock, RefreshCw } from "lucide-react";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useConversations } from "@/hooks/useConversations";
 import { formatDistanceToNow } from 'date-fns';
@@ -22,19 +22,29 @@ export function Conversations() {
             View and analyze your email conversations with AI insights.
           </p>
         </div>
-        <Button className="gradient-primary text-white border-0" onClick={handleAnalyze} disabled={analysis.loading}>
-          {analysis.loading ? (
-            <>
-              <MessageSquare className="mr-2 h-4 w-4 animate-pulse" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Analyze Conversations
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button className="gradient-primary text-white border-0" onClick={handleAnalyze} disabled={analysis.loading}>
+            {analysis.loading ? (
+              <>
+                <MessageSquare className="mr-2 h-4 w-4 animate-pulse" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Analyze New/Updated
+              </>
+            )}
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => analysis.analyzeConversations({ max: 5000, sinceLast: false })}
+            disabled={analysis.loading}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh (Re-analyze all)
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

@@ -8,6 +8,7 @@ import { useGmail } from '@/hooks/useGmail';
 import { useGmailPermissions } from '@/hooks/useGmailPermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
+import { useAnalysis } from '@/hooks/useAnalysis';
 const GmailSync = () => {
   const {
     messages,
@@ -21,6 +22,7 @@ const GmailSync = () => {
     signInWithGoogle
   } = useAuth();
   const [hasInitialSync, setHasInitialSync] = useState(false);
+  const analysis = useAnalysis();
 
   // Use centralized permission checking
   const showReauthButton = gmailPermissions.needsReauth;
@@ -32,6 +34,7 @@ const GmailSync = () => {
     } else {
       console.log('📧 Starting Gmail sync...');
       await syncGmail();
+      await analysis.analyzeConversations({ sinceLast: true, max: 500 });
       setHasInitialSync(true);
     }
   };
@@ -93,13 +96,14 @@ const GmailSync = () => {
     (async () => {
       try {
         await syncGmail({ sinceDays: 180, maxThreads: 200, fullHistory: false, silent: true });
+        await analysis.analyzeConversations({ sinceLast: true, max: 500 });
         localStorage.setItem(flagKey, 'true');
         setHasInitialSync(true);
       } catch (e) {
         console.error('Baseline Gmail sync failed:', e);
       }
     })();
-  }, [session, gmailPermissions.hasPermissions, gmailPermissions.needsReauth, gmailPermissions.isChecking, hasInitialSync, syncGmail]);
+  }, [session, gmailPermissions.hasPermissions, gmailPermissions.needsReauth, gmailPermissions.isChecking, hasInitialSync, syncGmail, analysis]);
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);

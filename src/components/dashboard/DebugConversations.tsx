@@ -79,7 +79,20 @@ export function DebugConversations() {
               className="gap-2"
             >
               <Zap className={`h-4 w-4 ${analyzing ? 'animate-pulse' : ''}`} />
-              {analyzing ? 'Analyzing...' : 'Analyze'}
+              {analyzing ? 'Analyzing...' : 'Analyze New/Updated'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await analyzeConversations({ max: 5000, sinceLast: false });
+                setTimeout(() => fetchAnalyses(), 2000);
+              }}
+              disabled={analyzing}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${analyzing ? 'animate-spin' : ''}`} />
+              {analyzing ? 'Re-analyzing...' : 'Refresh (Re-analyze all)'}
             </Button>
             <Button
               variant="outline"
@@ -89,7 +102,7 @@ export function DebugConversations() {
               className="gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              Refresh List
             </Button>
           </div>
         </div>
