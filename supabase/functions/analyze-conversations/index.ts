@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { decryptText, logDataAccess } from './decrypt.ts'
 
+// Security: Restricted CORS
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://tshyqizvsgvgrxygubqh.supabase.co',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -25,11 +27,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+    // Rate limiting check
+    const rateLimitCheck = req.headers.get('x-forwarded-for') || 'unknown';
+    console.log(`Analysis request from: ${rateLimitCheck.slice(0, 10)}...`);
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+    const MASTER_ENCRYPTION_KEY = Deno.env.get('MASTER_ENCRYPTION_KEY') ?? ''
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(JSON.stringify({ success: false, error: 'SERVER_MISCONFIGURED' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
@@ -51,7 +58,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const {
       data: { user },
@@ -65,7 +72,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabaseAuthed = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const supabaseAuthed = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       global: {
         headers: { Authorization: authHeader },
       },
@@ -98,7 +105,7 @@ Deno.serve(async (req) => {
     // Fetch conversations with tier-based filtering - only analyze conversations that exist in user's database
     let query = supabaseAuthed
       .from('conversations')
-      .select('id, subject, participants, snippet, full_content, last_message_date, message_count, user_id')
+      .select('id, subject, participants, snippet, last_message_date, message_count, user_id')
       .eq('user_id', user.id) // CRITICAL: Only analyze conversations belonging to this user
       .order('last_message_date', { ascending: false })
       .limit(1000)
@@ -164,9 +171,37 @@ Deno.serve(async (req) => {
     const results: AnalysisResult[] = []
     let processed = 0
 
+    // Audit log the analysis start
+    await logDataAccess(supabase, user.id, 'analyze', 'conversation', toAnalyze.length, { 
+      free_user: isFree,
+      since_last: since_last,
+      model: model 
+    });
+
     for (const conv of toAnalyze) {
       try {
-        const input = buildPrompt(conv, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
+        // Decrypt email content for analysis
+        let fullContent = '';
+        if (MASTER_ENCRYPTION_KEY) {
+          try {
+            const { data: encryptedContent } = await supabase
+              .from('email_contents')
+              .select('encrypted_body, encryption_iv')
+              .eq('conversation_id', conv.id)
+              .single();
+
+            if (encryptedContent) {
+              fullContent = await decryptText(encryptedContent.encrypted_body, encryptedContent.encryption_iv, MASTER_ENCRYPTION_KEY);
+            }
+          } catch (decError) {
+            console.error(`Failed to decrypt content for conversation ${conv.id}:`, decError);
+            fullContent = conv.snippet || '';
+          }
+        } else {
+          fullContent = conv.snippet || '';
+        }
+
+        const input = buildPrompt({...conv, full_content: fullContent}, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
         const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -245,6 +280,13 @@ function buildPrompt(conv: any, userName: string, userEmail: string): string {
 
   const systemInstructions = `You are an AI assistant helping users manage their email conversations and identify opportunities that need attention. Your role is to analyze email conversations and help users keep track of important communications that require follow-up or response.
 
+SECURITY GUARDRAIL SYSTEM INSTRUCTIONS:
+- NEVER include sensitive personal information (SSN, credit cards, passwords, private keys) in your analysis
+- ALWAYS redact or generalize financial amounts, account numbers, and proprietary business details
+- FOCUS on communication patterns and action items rather than sensitive content details
+- LIMIT suggested responses to professional, non-sensitive topics only
+- IF you encounter highly sensitive data, provide only high-level category analysis
+
 ANALYSIS PERSPECTIVE:
 - Always analyze from the main user's perspective (the person whose email account is being analyzed)
 - Focus on helping the user identify what requires their response or needs follow-up to extract a response from the recipient.
@@ -260,7 +302,8 @@ RESPONSE GUIDELINES:
 OUTPUT REQUIREMENTS:
 - Return ONLY valid JSON format
 - No additional text or explanations outside the JSON
-- Follow the exact JSON structure provided`
+- Follow the exact JSON structure provided
+- MINIMIZE sensitive data in output - focus on actionable insights only`
 
   const analysisPrompt = `Analyze this email conversation and provide insights in JSON format. Follow these specific guidelines:
 

@@ -73,7 +73,6 @@ export type Database = {
       conversations: {
         Row: {
           created_at: string
-          full_content: string | null
           gmail_message_id: string
           has_attachments: boolean | null
           id: string
@@ -89,7 +88,6 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          full_content?: string | null
           gmail_message_id: string
           has_attachments?: boolean | null
           id?: string
@@ -105,7 +103,6 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          full_content?: string | null
           gmail_message_id?: string
           has_attachments?: boolean | null
           id?: string
@@ -121,11 +118,78 @@ export type Database = {
         }
         Relationships: []
       }
+      data_access_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          resource_count: number | null
+          resource_type: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          resource_count?: number | null
+          resource_type: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          resource_count?: number | null
+          resource_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_contents: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          encrypted_body: string
+          encryption_iv: string
+          expires_at: string
+          id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          encrypted_body: string
+          encryption_iv: string
+          expires_at?: string
+          id?: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          encrypted_body?: string
+          encryption_iv?: string
+          expires_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_contents_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
+          auto_purge_enabled: boolean | null
           avatar_url: string | null
           created_at: string
           email: string | null
+          email_retention_days: number | null
           first_name: string | null
           full_name: string | null
           id: string
@@ -134,9 +198,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          auto_purge_enabled?: boolean | null
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_retention_days?: number | null
           first_name?: string | null
           full_name?: string | null
           id?: string
@@ -145,9 +211,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          auto_purge_enabled?: boolean | null
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_retention_days?: number | null
           first_name?: string | null
           full_name?: string | null
           id?: string

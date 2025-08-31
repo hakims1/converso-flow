@@ -6,7 +6,7 @@ interface Conversation {
   subject: string;
   participants: string[];
   snippet: string;
-  full_content: string;
+  full_content?: string; // Now optional since we store encrypted content separately
   last_message_date: string;
   message_count: number;
   thread_id: string;

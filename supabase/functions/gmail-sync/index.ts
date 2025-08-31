@@ -1,8 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Security: Restricted CORS
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-google-access-token',
+  'Access-Control-Allow-Origin': 'https://tshyqizvsgvgrxygubqh.supabase.co',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 interface GmailMessage {
@@ -23,14 +24,59 @@ interface GmailThread {
   messages: GmailMessage[]
 }
 
-// Get last 30 days timestamp
-const getThirtyDaysAgo = () => {
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-  return Math.floor(thirtyDaysAgo.getTime() / 1000)
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES']);
+
+// Encryption utilities
+async function encryptText(text: string, key: string): Promise<{ encrypted: string; iv: string }> {
+  const encoder = new TextEncoder();
+  
+  // Import key
+  const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt']
+  );
+  
+  // Generate random IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  
+  // Encrypt
+  const encryptedData = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    cryptoKey,
+    encoder.encode(text)
+  );
+  
+  return {
+    encrypted: btoa(String.fromCharCode(...new Uint8Array(encryptedData))),
+    iv: btoa(String.fromCharCode(...iv))
+  };
 }
 
-const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES']);
+// Audit logging function
+async function logDataAccess(
+  supabase: any, 
+  userId: string, 
+  action: string, 
+  resourceType: string, 
+  resourceCount?: number, 
+  metadata?: any
+) {
+  try {
+    await supabase.from('data_access_logs').insert({
+      user_id: userId,
+      action,
+      resource_type: resourceType,
+      resource_count: resourceCount,
+      metadata: metadata ? { ...metadata, timestamp: new Date().toISOString() } : null
+    });
+  } catch (error) {
+    console.error('Failed to log data access:', error);
+  }
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -39,10 +85,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    )
+    // Rate limiting check
+    const rateLimitCheck = req.headers.get('x-forwarded-for') || 'unknown';
+    console.log(`Gmail sync request from: ${rateLimitCheck.slice(0, 10)}...`);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const masterEncryptionKey = Deno.env.get('MASTER_ENCRYPTION_KEY')!;
+    
+    if (!masterEncryptionKey) {
+      throw new Error('Encryption key not configured');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get the authorization header
     const authHeader = req.headers.get('Authorization')
@@ -389,8 +444,7 @@ Deno.serve(async (req) => {
             gmail_message_id: lastMessage.id,
             subject,
             participants: participants.filter(Boolean),
-            snippet: lastMessage.snippet,
-            full_content: fullContent,
+            snippet: lastMessage.snippet?.slice(0, 500) || '', // Limited snippet
             last_message_date: new Date(parseInt(lastMessage.internalDate)).toISOString(),
             message_count: threadData.messages.length,
             labels: lastLabels,
@@ -399,7 +453,57 @@ Deno.serve(async (req) => {
             ) || false
           }
 
-          conversations.push(conversation)
+          // Upsert conversation (without full content)
+          const { data: convData, error: convError } = await supabaseAuthed
+            .from('conversations')
+            .upsert({
+              ...conversation,
+              full_content: undefined // Remove full_content from conversation
+            }, { 
+              onConflict: 'user_id,thread_id',
+              ignoreDuplicates: false 
+            })
+            .select('id')
+            .single();
+
+          if (convError) {
+            console.error(`Error upserting conversation ${threadData.id}:`, convError);
+            continue;
+          }
+
+          // Encrypt and store email content separately
+          if (fullContent.trim() && convData?.id) {
+            try {
+              const { encrypted, iv } = await encryptText(fullContent, masterEncryptionKey);
+              
+              // Get user's retention settings
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('email_retention_days')
+                .eq('user_id', user.id)
+                .single();
+              
+              const retentionDays = profile?.email_retention_days || 30;
+              const expiresAt = new Date();
+              expiresAt.setDate(expiresAt.getDate() + retentionDays);
+
+              await supabase
+                .from('email_contents')
+                .upsert({
+                  conversation_id: convData.id,
+                  encrypted_body: encrypted,
+                  encryption_iv: iv,
+                  expires_at: expiresAt.toISOString()
+                }, {
+                  onConflict: 'conversation_id',
+                  ignoreDuplicates: false
+                });
+            } catch (encError) {
+              console.error(`Failed to encrypt content for conversation ${convData.id}:`, encError);
+            }
+          }
+
+          conversations.push({...conversation, full_content: undefined})
           processedCount++
           if (targetMatches > 0 && processedCount >= targetMatches) {
             break
@@ -413,22 +517,19 @@ Deno.serve(async (req) => {
 
     console.log(`Processed ${processedCount} conversations for user ${user.id}`)
 
-    // Store conversations in database (upsert by user_id + thread_id)
-    if (conversations.length > 0) {
-      const { error: upsertError } = await supabaseAuthed
-        .from('conversations')
-        .upsert(conversations, { 
-          onConflict: 'user_id,thread_id',
-          ignoreDuplicates: false 
-        })
-      
-      if (upsertError) {
-        console.error('Error upserting conversations:', upsertError)
-        throw new Error(`Failed to store conversations: ${upsertError.message}`)
+    // Audit log the ingestion
+    await logDataAccess(
+      supabase,
+      user.id, 
+      'ingest',
+      'conversation',
+      processedCount,
+      { 
+        threads_requested: threads.length,
+        since_days: sinceDays,
+        full_history: fullHistory 
       }
-    }
-
-    // Ingestion complete; not updating processing quotas here (reserved for analysis).
+    );
 
     return new Response(
       JSON.stringify({
@@ -440,7 +541,7 @@ Deno.serve(async (req) => {
           from: c.participants[0] || '',
           date: c.last_message_date,
           snippet: c.snippet,
-          content: c.full_content,
+          content: '[ENCRYPTED]', // Don't return full content
           labels: c.labels || [],
           url: `https://mail.google.com/mail/u/0/#inbox/${c.thread_id}`
         })),

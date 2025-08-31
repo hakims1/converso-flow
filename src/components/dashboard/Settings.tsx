@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Settings as SettingsIcon, Mail, Bell, Shield, CreditCard, User, Trash2 } from "lucide-react";
+import { SecuritySettings } from './SecuritySettings';
 
 export function DashboardSettings() {
   return (
@@ -231,6 +232,8 @@ export function DashboardSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <SecuritySettings />
     </div>
   );
 }
