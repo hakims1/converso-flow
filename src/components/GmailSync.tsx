@@ -79,6 +79,27 @@ const GmailSync = () => {
       document.removeEventListener('visibilitychange', onFocus);
     };
   }, [gmailPermissions.needsReauth]);
+
+  // Auto-run baseline sync after permissions are granted (last 6 months)
+  useEffect(() => {
+    if (!session || !gmailPermissions.hasPermissions || gmailPermissions.needsReauth || gmailPermissions.isChecking || hasInitialSync) return;
+    const userId = session.user?.id;
+    if (!userId) return;
+    const flagKey = `gmail_baseline_synced_${userId}`;
+    const alreadySynced = localStorage.getItem(flagKey) === 'true';
+    if (alreadySynced) return;
+
+    console.log('🚀 Running baseline Gmail sync for last 6 months...');
+    (async () => {
+      try {
+        await syncGmail({ sinceDays: 180, maxThreads: 200, fullHistory: false, silent: true });
+        localStorage.setItem(flagKey, 'true');
+        setHasInitialSync(true);
+      } catch (e) {
+        console.error('Baseline Gmail sync failed:', e);
+      }
+    })();
+  }, [session, gmailPermissions.hasPermissions, gmailPermissions.needsReauth, gmailPermissions.isChecking, hasInitialSync, syncGmail]);
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -143,7 +164,7 @@ const GmailSync = () => {
                   ) : (
                     <>
                       <Mail className="mr-2 h-4 w-4" />
-                      Sync Gmail
+                      Sync latest emails
                     </>
                   )}
                 </Button>

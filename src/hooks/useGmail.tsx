@@ -31,7 +31,7 @@ export const useGmail = () => {
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const syncGmail = async () => {
+  const syncGmail = async (opts?: { sinceDays?: number; maxThreads?: number; fullHistory?: boolean; silent?: boolean }) => {
     if (!session) {
       toast({
         title: 'Authentication Required',
@@ -44,8 +44,13 @@ export const useGmail = () => {
     console.log('🔄 Starting Gmail sync...', {
       hasSession: !!session,
       hasAccessToken: !!session.access_token,
-      hasProviderToken: !!session.provider_token
+      hasProviderToken: !!session.provider_token,
+      opts
     });
+
+    const sinceDays = opts?.sinceDays ?? 60;
+    const maxThreads = opts?.maxThreads ?? 50;
+    const fullHistory = opts?.fullHistory ?? false;
 
     setLoading(true);
     try {
@@ -55,9 +60,9 @@ export const useGmail = () => {
         },
         body: {
           access_token: session.provider_token ?? '',
-          full_history: false,
-          since_days: 60,
-          max_threads: 50,
+          full_history: fullHistory,
+          since_days: sinceDays,
+          max_threads: maxThreads,
         },
       });
 
@@ -83,10 +88,12 @@ export const useGmail = () => {
         
         // Analysis is now manual. Users can trigger it from the dashboard when ready.
         
-        toast({
-          title: 'Gmail Synced',
-          description: `Successfully loaded ${response.messages.length} recent emails.`,
-        });
+        if (!opts?.silent) {
+          toast({
+            title: 'Gmail Synced',
+            description: `Successfully loaded ${response.messages.length} recent emails.`,
+          });
+        }
       } else {
         // Check for specific permission errors
         if (response.error === 'GMAIL_PERMISSIONS_REQUIRED') {
