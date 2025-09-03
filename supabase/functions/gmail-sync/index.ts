@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Security: Restricted CORS
+// Security: Allow requests from app domains
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://tshyqizvsgvgrxygubqh.supabase.co',
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
