@@ -6,9 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signInWithGoogle: (forceReauth?: boolean) => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
-  signUpWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -32,32 +30,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    // THEN check for existing session
+    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async (forceReauth = false) => {
+  const signInWithGoogle = async () => {
     const redirectUrl = `${window.location.origin}/auth`;
-    
-    // If forcing reauth (for Gmail permissions), sign out first to ensure fresh OAuth
-    if (forceReauth) {
-      await supabase.auth.signOut({ scope: 'local' });
-    }
     
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -65,33 +59,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         redirectTo: redirectUrl,
         queryParams: {
           access_type: 'offline',
-          prompt: forceReauth ? 'consent' : 'consent', // Always use consent to ensure Gmail scope is requested
-          include_granted_scopes: 'true' // Ensure all requested scopes are included
+          prompt: 'consent' // Always request consent to ensure Gmail scope
         },
         scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly'
       }
     });
-  };
-
-  const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
-  };
-
-  const signUpWithEmail = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl
-      }
-    });
-    return { error };
   };
 
   const signOut = async () => {
@@ -103,8 +75,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     session,
     loading,
     signInWithGoogle,
-    signInWithEmail,
-    signUpWithEmail,
     signOut,
   };
 
