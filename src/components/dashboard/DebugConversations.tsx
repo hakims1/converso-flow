@@ -16,6 +16,41 @@ export function DebugConversations() {
   const { loading: analyzing, analyzeConversations } = useAnalysis();
   const { user } = useAuth();
 
+  // Sorting helper functions
+  const getMessageGroup = (messageCount: number): number => {
+    if (messageCount >= 50) return 1;
+    if (messageCount >= 25) return 2; 
+    if (messageCount >= 5) return 3;
+    if (messageCount >= 2) return 4;
+    return 5;
+  };
+
+  const sortConversationsByPriority = (analyses: any[]): any[] => {
+    return [...analyses].sort((a, b) => {
+      const aMessageCount = a.conversations?.message_count || 1;
+      const bMessageCount = b.conversations?.message_count || 1;
+      const aGroup = getMessageGroup(aMessageCount);
+      const bGroup = getMessageGroup(bMessageCount);
+      
+      // Primary: Message group (ascending - smaller group number = higher priority)
+      if (aGroup !== bGroup) {
+        return aGroup - bGroup;
+      }
+      
+      // Secondary: Urgency score (descending - higher score = higher priority)
+      const aUrgency = a.urgency_score || 0;
+      const bUrgency = b.urgency_score || 0;
+      if (aUrgency !== bUrgency) {
+        return bUrgency - aUrgency;
+      }
+      
+      // Tertiary: Date (descending - more recent = higher priority)
+      const aDate = new Date(a.conversations?.last_message_date || a.processed_at);
+      const bDate = new Date(b.conversations?.last_message_date || b.processed_at);
+      return bDate.getTime() - aDate.getTime();
+    });
+  };
+
   const fetchAnalyses = async () => {
     setLoading(true);
     setError(null);
@@ -28,14 +63,18 @@ export function DebugConversations() {
           conversations (
             subject,
             participants,
-            thread_id
+            thread_id,
+            message_count,
+            last_message_date
           )
         `)
-        .order('processed_at', { ascending: false })
-        .limit(20);
+        .limit(50); // Increased limit to get more data for better sorting
         
       if (fetchError) throw fetchError;
-      setAnalyses(data || []);
+      
+      // Apply sophisticated sorting
+      const sortedData = sortConversationsByPriority(data || []);
+      setAnalyses(sortedData);
     } catch (err) {
       console.error('Error fetching analyses:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch analyses');
@@ -159,12 +198,20 @@ export function DebugConversations() {
                         {analysis.completion_status}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <Users className="h-3 w-3" />
-                      <span>
-                        {analysis.conversations?.participants?.join(', ') || 'No participants'}
-                      </span>
-                    </div>
+                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                       <Users className="h-3 w-3" />
+                       <span>
+                         {analysis.conversations?.participants?.join(', ') || 'No participants'}
+                       </span>
+                       <MessageSquare className="h-3 w-3 ml-2" />
+                       <span>{analysis.conversations?.message_count || 1} messages</span>
+                       <Badge 
+                         variant="secondary" 
+                         className="ml-2 text-xs"
+                       >
+                         Group {getMessageGroup(analysis.conversations?.message_count || 1)}
+                       </Badge>
+                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
