@@ -65,7 +65,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         redirectTo: redirectUrl,
         queryParams: {
           access_type: 'offline',
-          prompt: forceReauth ? 'consent' : 'select_account',
+          prompt: forceReauth ? 'consent' : 'consent', // Always use consent to ensure Gmail scope is requested
+          include_granted_scopes: 'true' // Ensure all requested scopes are included
         },
         scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly'
       }
