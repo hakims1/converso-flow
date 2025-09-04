@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap, Info, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
@@ -14,7 +15,8 @@ export function DebugConversations() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { loading: analyzing, analyzeConversations, lastResult } = useAnalysis();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const { toast } = useToast();
 
   // Sorting helper functions
   const getMessageGroup = (messageCount: number): number => {
@@ -110,6 +112,30 @@ export function DebugConversations() {
               variant="outline"
               size="sm"
               onClick={async () => {
+                console.log('Starting fetch and analysis workflow...');
+                
+                // First fetch latest emails from Gmail
+                const gmailResponse = await supabase.functions.invoke('gmail-sync', {
+                  headers: { Authorization: `Bearer ${session?.access_token}` },
+                  body: { 
+                    access_token: session?.provider_token,
+                    since_days: 7, // Fetch emails from last 7 days
+                    max_threads: 100
+                  }
+                });
+                
+                if (gmailResponse.error) {
+                  toast({
+                    title: 'Gmail sync failed',
+                    description: gmailResponse.error.message || 'Failed to fetch latest emails',
+                    variant: 'destructive',
+                  });
+                  return;
+                }
+                
+                console.log('Gmail sync complete, starting analysis...');
+                
+                // Then analyze conversations (focusing on recent ones)
                 await analyzeConversations({ max: 75, sinceLast: true });
                 // Auto-refresh after analysis completes
                 setTimeout(() => fetchAnalyses(), 2000);
@@ -118,7 +144,7 @@ export function DebugConversations() {
               className="gap-2"
             >
               <Zap className={`h-4 w-4 ${analyzing ? 'animate-pulse' : ''}`} />
-              {analyzing ? 'Analyzing...' : 'Analyze New/Updated'}
+              {analyzing ? 'Fetching & Analyzing...' : 'Fetch Latest & Analyze'}
             </Button>
             <Button
               variant="outline"

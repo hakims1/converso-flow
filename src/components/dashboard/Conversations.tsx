@@ -3,15 +3,49 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock, RefreshCw } from "lucide-react";
+import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock, RefreshCw, Zap } from "lucide-react";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useConversations } from "@/hooks/useConversations";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from 'date-fns';
 
 export function Conversations() {
   const analysis = useAnalysis();
   const { conversations, loading, error, refetch } = useConversations();
-  const handleAnalyze = () => analysis.analyzeConversations({ max: 75, sinceLast: true });
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const handleFetchAndAnalyze = async () => {
+    console.log('Starting fetch and analysis workflow...');
+    
+    // First fetch latest emails from Gmail
+    const gmailResponse = await supabase.functions.invoke('gmail-sync', {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+      body: { 
+        access_token: session?.provider_token,
+        since_days: 7, // Fetch emails from last 7 days
+        max_threads: 100
+      }
+    });
+    
+    if (gmailResponse.error) {
+      toast({
+        title: 'Gmail sync failed',
+        description: gmailResponse.error.message || 'Failed to fetch latest emails',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    console.log('Gmail sync complete, starting analysis...');
+    
+    // Refresh conversations list to show new ones
+    await refetch();
+    
+    // Then analyze conversations (focusing on recent ones)
+    await analysis.analyzeConversations({ max: 75, sinceLast: true });
+  };
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -23,16 +57,16 @@ export function Conversations() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button className="gradient-primary text-white border-0" onClick={handleAnalyze} disabled={analysis.loading}>
+          <Button className="gradient-primary text-white border-0" onClick={handleFetchAndAnalyze} disabled={analysis.loading}>
             {analysis.loading ? (
               <>
-                <MessageSquare className="mr-2 h-4 w-4 animate-pulse" />
-                Analyzing...
+                <Zap className="mr-2 h-4 w-4 animate-pulse" />
+                Fetching & Analyzing...
               </>
             ) : (
               <>
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Analyze New/Updated
+                <Zap className="mr-2 h-4 w-4" />
+                Fetch Latest & Analyze
               </>
             )}
           </Button>
