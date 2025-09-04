@@ -26,7 +26,7 @@ export function useConversations() {
         .from('conversations')
         .select('*')
         .order('last_message_date', { ascending: false })
-        .limit(50);
+        .limit(75);
 
       if (dbError) {
         throw dbError;

@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
     const _b: any = body || {};
     const fullHistory = typeof _b.full_history === 'boolean' ? _b.full_history : false;
     const sinceDays = typeof _b.since_days === 'number' ? Math.max(0, _b.since_days) : 30;
-    const maxThreads = typeof _b.max_threads === 'number' ? Math.max(0, _b.max_threads) : 75;
+    const maxThreads = typeof _b.max_threads === 'number' ? Math.max(0, _b.max_threads) : 100;
 
     // Fallback: try to get from headers if not in body
     if (!accessToken) {
@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
     const defaultDays = 30;
     const days = fullHistory ? 0 : (sinceDays > 0 ? sinceDays : defaultDays);
     const afterUnix = days > 0 ? Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000) : 0;
-    const targetMatches = 50;
+    const targetMatches = 100;
 
     // Paginate through all threads
     const threads: Array<{ id: string }> = [];
@@ -505,7 +505,8 @@ Deno.serve(async (req) => {
 
           conversations.push({...conversation, full_content: undefined})
           processedCount++
-          if (targetMatches > 0 && processedCount >= targetMatches) {
+          // Continue processing until we reach maxThreads to ensure we get enough for analysis
+          if (maxThreads > 0 && processedCount >= maxThreads) {
             break
           }
         } catch (error) {

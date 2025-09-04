@@ -68,7 +68,7 @@ export function DebugConversations() {
             last_message_date
           )
         `)
-        .limit(50); // Increased limit to get more data for better sorting
+        .limit(75); // Show 75 most recent analyzed conversations
         
       if (fetchError) throw fetchError;
       
