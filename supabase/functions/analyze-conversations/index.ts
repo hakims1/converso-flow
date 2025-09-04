@@ -258,8 +258,31 @@ Deno.serve(async (req) => {
     const skipped = toAnalyze.length - processed
     const remaining = Math.max(0, candidates.length - toAnalyze.length)
 
+    const error_counts = results
+      .filter((r) => !r.success && r.error_code)
+      .reduce((acc: Record<string, number>, r) => {
+        const code = r.error_code as string
+        acc[code] = (acc[code] || 0) + 1
+        return acc
+      }, {})
+
     return new Response(
-      JSON.stringify({ success: true, processed, skipped, remaining, results }),
+      JSON.stringify({ 
+        success: true, 
+        processed, 
+        skipped, 
+        remaining, 
+        results,
+        error_counts,
+        totals: {
+          total_conversations: conversations.length,
+          eligible_conversations: toAnalyze.length,
+          prior_analyses: analyses?.length ?? 0,
+          candidates_total: candidates.length,
+          is_free: isFree,
+          cutoff_date: cutoffDate
+        }
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (e: any) {

@@ -11,7 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 export function Conversations() {
   const analysis = useAnalysis();
   const { conversations, loading, error, refetch } = useConversations();
-  const handleAnalyze = () => analysis.analyzeConversations({ max: 10, sinceLast: true });
+  const handleAnalyze = () => analysis.analyzeConversations({ max: 75, sinceLast: true });
   return (
     <div className="space-y-6">
       {/* Header */}

@@ -34,7 +34,7 @@ export const useAnalysis = () => {
       const { data, error } = await supabase.functions.invoke('analyze-conversations', {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: {
-          max_to_analyze: opts?.max ?? 10,
+          max_to_analyze: opts?.max ?? 75,
           since_last: opts?.sinceLast ?? true,
           respect_tier: true,
         },
@@ -48,9 +48,10 @@ export const useAnalysis = () => {
       setLastResult(res);
 
       if (res.success) {
+        const failed = res.results?.filter((r) => !r.success).length ?? 0;
         toast({
           title: 'Analysis complete',
-          description: `Processed ${res.processed ?? 0}. Remaining: ${res.remaining ?? 0}.`,
+          description: `Processed ${res.processed ?? 0}, failed ${failed}, remaining ${res.remaining ?? 0}.`,
         });
       } else {
         toast({

@@ -13,7 +13,7 @@ export function DebugConversations() {
   const [analyses, setAnalyses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { loading: analyzing, analyzeConversations } = useAnalysis();
+  const { loading: analyzing, analyzeConversations, lastResult } = useAnalysis();
   const { user } = useAuth();
 
   // Sorting helper functions
@@ -110,7 +110,7 @@ export function DebugConversations() {
               variant="outline"
               size="sm"
               onClick={async () => {
-                await analyzeConversations({ max: 10, sinceLast: true });
+                await analyzeConversations({ max: 75, sinceLast: true });
                 // Auto-refresh after analysis completes
                 setTimeout(() => fetchAnalyses(), 2000);
               }}
@@ -162,6 +162,14 @@ export function DebugConversations() {
           <div className="text-red-500 text-sm mb-4 p-3 bg-red-50 rounded-md">
             Error: {error}
           </div>
+        )}
+
+        {lastResult && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              {`Processed ${lastResult.processed ?? 0}, failed ${(lastResult.results?.filter(r => !r.success).length) ?? 0}, remaining ${lastResult.remaining ?? 0}.`}
+            </AlertDescription>
+          </Alert>
         )}
 
         {loading && !analyses.length && (
