@@ -126,7 +126,7 @@ export function SortingBins() {
                   {[...Array(6)].map((_, i) => (
                     <motion.div
                       key={i}
-                      className="absolute w-40 sm:w-48 h-12 bg-white border border-blue-200/50 rounded-lg shadow-sm left-1/4 transform -translate-x-1/2"
+                      className="absolute w-40 sm:w-48 h-12 bg-white border border-blue-200/50 rounded-lg shadow-sm left-0"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ 
                         y: i * 4 - (6 * 4 / 2) - 6, // Adjusted for centering
@@ -218,7 +218,7 @@ export function SortingBins() {
 
         {/* Additional scattered emails for visual effect */}
         <motion.div 
-          className="absolute top-1/4 left-1/4 opacity-20"
+          className="absolute top-1/4 left-1/3 opacity-20"
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 0.2 }}
           transition={{ duration: 1, delay: 1.5 }}
