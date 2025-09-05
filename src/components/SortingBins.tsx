@@ -70,18 +70,19 @@ export function SortingBins() {
               <div className="w-full h-52 bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 rounded-2xl relative overflow-visible shadow-sm flex items-center justify-center">
                 
                 {/* Email Stack Inside Container */}
-                <div className="relative -mt-8 w-48 left-1/2 transform -translate-x-1/2">
-                  {/* Email cards stacked and slightly rotated */}
-                  {[...Array(8)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute w-40 sm:w-48 h-12 bg-white border border-orange-200/50 rounded-lg shadow-sm left-0"
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ 
-                        y: i * 4 - (8 * 4 / 2), // Adjusted for centering
-                        opacity: 1,
-                        rotate: (Math.random() - 0.5) * 10
-                      }}
+                <div className="flex flex-col items-center -mt-8">
+  {[...Array(8)].map((_, i) => (
+    <motion.div
+      key={i}
+      className="w-40 sm:w-48 h-12 bg-white border border-orange-200/50 rounded-lg shadow-sm"
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ 
+        y: i * 4 - (8 * 4 / 2),
+        opacity: 1,
+        rotate: (Math.random() - 0.5) * 10
+      }}
+      // ... rest of props
+    >
                       transition={{ 
                         duration: 0.5, 
                         delay: i * 0.1 + 0.5,
