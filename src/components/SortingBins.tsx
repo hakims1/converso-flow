@@ -121,7 +121,7 @@ export function SortingBins() {
               <div className="w-full h-52 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl relative overflow-visible shadow-sm flex items-center justify-center">
                 
                 {/* Email Stack Inside Container */}
-                <div className="relative -mt-8 w-48 left-1/1 transform -translate-x-1/2">
+                <div className="relative -mt-8 w-48 left-1/2 transform -translate-x-1/2">
                   {/* Email cards stacked and slightly rotated */}
                   {[...Array(6)].map((_, i) => (
                     <motion.div
