@@ -75,7 +75,7 @@ export function SortingBins() {
                   {[...Array(8)].map((_, i) => (
                     <motion.div
                       key={i}
-                      className="absolute w-40 sm:w-48 h-12 bg-white border border-orange-200/50 rounded-lg shadow-sm left-0"
+                      className="absolute w-40 sm:w-48 h-12 bg-white border border-orange-200/50 rounded-lg shadow-sm left-1/2 transform -translate-x-1/2"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ 
                         y: i * 4 - (8 * 4 / 2), // Adjusted for centering
