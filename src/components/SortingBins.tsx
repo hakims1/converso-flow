@@ -129,7 +129,7 @@ export function SortingBins() {
                       className="absolute w-40 sm:w-48 h-12 bg-white border border-blue-200/50 rounded-lg shadow-sm left-0"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ 
-                        y: i * 4 - (6 * 4 / 2), // Adjusted for centering
+                        y: i * 4 - (6 * 4 / 2) - 6, // Adjusted for centering
                         opacity: 1,
                         rotate: (Math.random() - 0.5) * 8
                       }}
@@ -139,7 +139,7 @@ export function SortingBins() {
                         type: "spring",
                         stiffness: 100
                       }}
-                      style={{ zIndex: 10 - i }}
+                      style={{ zIndex: 10 - i, left: "0px" }}
                     >
                       <div className="flex items-center gap-2 p-2">
                         <Mail className="w-4 h-4 text-blue-500" />
