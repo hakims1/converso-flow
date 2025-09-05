@@ -102,6 +102,9 @@ export function SortingBins() {
                     </motion.div>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          </div>
 
           {/* Right Sorting Bin - "Follow-up" */}
           <div className="w-full max-w-sm opacity-90">
