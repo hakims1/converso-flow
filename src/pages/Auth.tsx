@@ -64,8 +64,8 @@ const Auth = () => {
 
         <Card className="gradient-card shadow-card">
           <CardHeader className="text-center space-y-2">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <Mail className="h-8 w-8 text-primary-light" />
+            <div className="flex flex-col items-center justify-center space-y-2 mb-4">
+              <Mail className="h-8 w-8 text-primary" />
               <span className="text-2xl font-bold gradient-primary bg-clip-text text-transparent">
                 Email Insight Helper
               </span>
@@ -109,7 +109,7 @@ const Auth = () => {
             {/* Sign In Button */}
             <Button 
               onClick={handleSignIn} 
-              className="w-full" 
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90" 
               size="lg"
             >
               <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24">
