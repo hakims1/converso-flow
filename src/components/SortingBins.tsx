@@ -139,7 +139,7 @@ export function SortingBins() {
                         type: "spring",
                         stiffness: 100
                       }}
-                      style={{ zIndex: 10 - i, left: "0px" }}
+                      style={{ zIndex: 10 - i }}
                     >
                       <div className="flex items-center gap-2 p-2">
                         <Mail className="w-4 h-4 text-blue-500" />
