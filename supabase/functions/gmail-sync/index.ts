@@ -236,11 +236,11 @@ Deno.serve(async (req) => {
     do {
       const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/threads');
       url.searchParams.set('maxResults', String(perPage));
-      // Build Gmail search query: since date and exclude categories (promotions, social, updates)
+      // Build Gmail search query: since date and exclude promotions/social only
       const qParts: string[] = [];
       if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
-      // Exclude blocked categories and no-reply/reply senders
-      qParts.push('-category:promotions', '-category:social', '-category:updates', '-from:reply');
+      // Exclude broad promo/social categories; allow Updates to avoid hiding legit threads
+      qParts.push('-category:promotions', '-category:social', '-from:reply');
       if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
@@ -374,20 +374,20 @@ Deno.serve(async (req) => {
 
           const fullContent = collectText(lastMessage);
 
-          // Apply strict thread-level filters per requirements
-          const blockedInAnyMessage = threadData.messages.some(m => (m.labelIds || []).some(id => BLOCKED_CATEGORIES.has(id)));
-          const listUnsubInAnyMessage = threadData.messages.some(m => (m.payload.headers || []).some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'));
+          // Apply strict thread-level filters per requirements (skip ONLY if ALL messages are clearly non-conversational)
+          const blockedInAllMessages = threadData.messages.every(m => (m.labelIds || []).some(id => BLOCKED_CATEGORIES.has(id)));
+          const listUnsubInAllMessages = threadData.messages.every(m => (m.payload.headers || []).some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'));
           const hasReplyInAddress = (fromValue: string) => {
             if (!fromValue) return false;
             const emails = fromValue.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
             return emails.some((e) => e.toLowerCase().includes('reply'));
           };
-          const replySenderInAnyMessage = threadData.messages.some(m => {
+          const replySenderInAllMessages = threadData.messages.every(m => {
             const fromVal = (m.payload.headers || []).find(h => (h.name || '').toLowerCase() === 'from')?.value || '';
             return hasReplyInAddress(fromVal);
           });
-          // Detect "unsubscribe" keyword within text/plain or text/html parts
-          const unsubscribeInBodyInAnyMessage = threadData.messages.some((m) => {
+          // Detect "unsubscribe" keyword within text/plain or text/html parts for each message
+          const unsubscribeInBodyInAllMessages = threadData.messages.every((m) => {
             let plain = '';
             let html = '';
             const pushData = (mime?: string, data?: string) => {
@@ -414,8 +414,9 @@ Deno.serve(async (req) => {
             return hasUnsub;
           });
 
-          if (blockedInAnyMessage || listUnsubInAnyMessage || replySenderInAnyMessage || unsubscribeInBodyInAnyMessage) {
-            console.log(`Skipping thread ${threadData.id} due to filters`, { blockedInAnyMessage, listUnsubInAnyMessage, replySenderInAnyMessage, unsubscribeInBodyInAnyMessage });
+          if (blockedInAllMessages || listUnsubInAllMessages || replySenderInAllMessages || unsubscribeInBodyInAllMessages) {
+            const subjForLog = headers.find(h => h.name === 'Subject')?.value || '';
+            console.log(`Skipping thread ${threadData.id} due to strict-all filters`, { subjForLog, blockedInAllMessages, listUnsubInAllMessages, replySenderInAllMessages, unsubscribeInBodyInAllMessages });
             continue;
           }
 
