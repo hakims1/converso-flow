@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, MessageSquare, CheckSquare, BarChart3, Settings, Mail } from "lucide-react";
+import { Home, MessageSquare, CheckSquare, BarChart3, Settings, Mail, Tags } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 import {
@@ -19,6 +19,7 @@ import {
 const menuItems = [
   { title: "Overview", url: "/dashboard", icon: Home },
   { title: "Conversations", url: "/dashboard/conversations", icon: MessageSquare },
+  { title: "Categories", url: "/dashboard/categories", icon: Tags },
   { title: "Action Items", url: "/dashboard/actions", icon: CheckSquare },
   { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
   { title: "Settings", url: "/dashboard/settings", icon: Settings },
