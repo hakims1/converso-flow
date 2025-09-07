@@ -19,7 +19,7 @@ export const useAnalysis = () => {
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const analyzeConversations = async (opts?: { max?: number; sinceLast?: boolean }) => {
+  const analyzeConversations = async (opts?: { max?: number; sinceLast?: boolean; cutoffDays?: number }) => {
     if (!session) {
       toast({
         title: 'Sign in required',
@@ -35,8 +35,9 @@ export const useAnalysis = () => {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: {
           max_to_analyze: opts?.max ?? 75,
-          since_last: opts?.sinceLast ?? true,
-          respect_tier: true,
+          since_last: opts?.sinceLast ?? false,
+          respect_tier: false,
+          cutoff_days: opts?.cutoffDays ?? 180,
         },
       });
 

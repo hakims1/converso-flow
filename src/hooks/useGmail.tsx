@@ -48,8 +48,8 @@ export const useGmail = () => {
       opts
     });
 
-    const sinceDays = opts?.sinceDays ?? 60;
-    const maxThreads = opts?.maxThreads ?? 50;
+    const sinceDays = opts?.sinceDays ?? 180;
+    const maxThreads = opts?.maxThreads ?? 100;
     const fullHistory = opts?.fullHistory ?? false;
 
     setLoading(true);

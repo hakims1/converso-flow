@@ -11,6 +11,7 @@ interface AnalyzeRequestBody {
   since_last?: boolean
   respect_tier?: boolean
   model?: string
+  cutoff_days?: number
 }
 
 interface AnalysisResult {
@@ -85,10 +86,11 @@ Deno.serve(async (req) => {
       // ignore
     }
 
-    const respect_tier = body.respect_tier !== false
-    const model = body.model || 'claude-3-5-haiku-20241022'
-    const since_last = respect_tier ? false : body.since_last !== false
-    const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(1000, body.max_to_analyze)) : 1000
+const respect_tier = body.respect_tier === true
+const model = body.model || 'claude-3-5-haiku-20241022'
+const since_last = body.since_last === true
+const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(1000, body.max_to_analyze)) : 75
+const cutoffDays = typeof body.cutoff_days === 'number' ? Math.max(1, Math.min(365, body.cutoff_days)) : 180
 
     const { data: history } = await supabaseAuthed
       .from('user_processing_history')
@@ -98,10 +100,15 @@ Deno.serve(async (req) => {
 
     const isFree = (history?.subscription_tier ?? 'free') === 'free'
 
-    // For free users: only analyze conversations from last 60 days
-    const cutoffDate = isFree ? new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString() : null
-    
-    // Fetch conversations with tier-based filtering - only analyze conversations that exist in user's database
+// Determine cutoff date: prefer explicit cutoffDays; if respecting tier and free, enforce 60 days
+let cutoffDate: string | null = null
+if (cutoffDays) {
+  cutoffDate = new Date(Date.now() - cutoffDays * 24 * 60 * 60 * 1000).toISOString()
+} else if (isFree && respect_tier) {
+  cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+}
+
+// Fetch conversations within cutoff (if any), ordered by most recent
     let query = supabaseAuthed
       .from('conversations')
       .select('id, subject, participants, snippet, last_message_date, message_count, user_id')
@@ -200,33 +207,54 @@ Deno.serve(async (req) => {
           fullContent = conv.snippet || '';
         }
 
-        const input = buildPrompt({...conv, full_content: fullContent}, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
-        const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 800,
-            temperature: 0.1,
-            messages: [
-              { role: 'user', content: input },
-            ],
-          }),
-        })
+const input = buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
 
-        if (!aiResp.ok) {
-          const txt = await aiResp.text()
-          console.error('Anthropic error:', aiResp.status, txt)
-          results.push({ conversation_id: conv.id, success: false, error_code: 'MODEL_ERROR', error_message: txt })
-          continue
-        }
+// Retry with exponential backoff for rate limits / transient errors
+let aiData: any = null
+let attempt = 0
+while (attempt < 3) {
+  attempt++
+  const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 500,
+      temperature: 0.1,
+      messages: [
+        { role: 'user', content: input },
+      ],
+    }),
+  })
 
-        const data = await aiResp.json()
-        const text = data?.content?.[0]?.text || ''
+  if (aiResp.status === 429 || aiResp.status >= 500) {
+    const waitMs = 300 * Math.pow(2, attempt - 1)
+    const txt = await aiResp.text()
+    console.error(`Anthropic error (attempt ${attempt}):`, aiResp.status, txt)
+    await new Promise((r) => setTimeout(r, waitMs))
+    continue
+  }
+
+  if (!aiResp.ok) {
+    const txt = await aiResp.text()
+    console.error('Anthropic error:', aiResp.status, txt)
+    results.push({ conversation_id: conv.id, success: false, error_code: 'MODEL_ERROR', error_message: txt })
+    break
+  }
+
+  aiData = await aiResp.json()
+  break
+}
+
+if (!aiData) {
+  continue
+}
+
+const text = aiData?.content?.[0]?.text || ''
         const parsed = safeParseJSON(text)
         if (!parsed) {
           results.push({ conversation_id: conv.id, success: false, error_code: 'JSON_PARSE_ERROR', error_message: 'Model did not return valid JSON' })
@@ -249,6 +277,7 @@ Deno.serve(async (req) => {
 
         results.push({ conversation_id: conv.id, success: true })
         processed += 1
+        await new Promise((r) => setTimeout(r, 120))
       } catch (e: any) {
         console.error('Unexpected analyze error:', e)
         results.push({ conversation_id: conv.id, success: false, error_code: 'UNEXPECTED', error_message: e?.message || String(e) })
@@ -295,7 +324,9 @@ Deno.serve(async (req) => {
 })
 
 function buildPrompt(conv: any, userName: string, userEmail: string): string {
-  const content = conv.full_content || conv.snippet || ''
+  const rawContent = conv.full_content || conv.snippet || ''
+  const MAX_CONTENT_CHARS = 12000
+  const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
   const subject = conv.subject || ''
   const participants = Array.isArray(conv.participants) ? conv.participants.join(', ') : ''
   const msgCount = conv.message_count || 1
