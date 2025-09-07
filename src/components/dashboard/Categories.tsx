@@ -10,8 +10,151 @@ import { useConversationAnalysis } from "@/hooks/useConversationAnalysis";
 import { useTopicClustering } from "@/hooks/useTopicClustering";
 import { formatDistanceToNow } from "date-fns";
 
+// Dummy data for preview
+const dummyConversations = [
+  {
+    id: '1',
+    subject: 'Investor Platform Pitch to Bain',
+    participants: ['john@example.com', 'sarah@bain.com'],
+    snippet: 'Following up on our discussion about the investment platform...',
+    last_message_date: '2024-01-15T10:30:00Z',
+    message_count: 8,
+    thread_id: 'thread_1',
+    analysis: {
+      category: 'Business',
+      topic: 'Investor Platform Pitch to Bain',
+      sentiment: 'Positive',
+      summary: 'Ongoing discussion about investment platform pitch',
+      action_items: ['Send follow-up presentation', 'Schedule demo'],
+      urgency_score: 8
+    }
+  },
+  {
+    id: '2',
+    subject: 'Startup Investment Platform Pitch',
+    participants: ['alex@startup.com', 'mike@venture.com'],
+    snippet: 'Excited to share our investment platform proposal...',
+    last_message_date: '2024-01-14T14:20:00Z',
+    message_count: 12,
+    thread_id: 'thread_2',
+    analysis: {
+      category: 'Business',
+      topic: 'Startup Investment Platform Pitch',
+      sentiment: 'Positive',
+      summary: 'Investment platform pitch discussion',
+      action_items: ['Prepare term sheet', 'Review legal docs'],
+      urgency_score: 9
+    }
+  },
+  {
+    id: '3',
+    subject: 'Meeting Request - Q1 Planning',
+    participants: ['team@company.com', 'manager@company.com'],
+    snippet: 'We need to schedule our quarterly planning session...',
+    last_message_date: '2024-01-13T09:15:00Z',
+    message_count: 4,
+    thread_id: 'thread_3',
+    analysis: {
+      category: 'Internal',
+      topic: 'Quarterly Planning Meeting',
+      sentiment: 'Neutral',
+      summary: 'Planning Q1 meeting logistics',
+      action_items: ['Book conference room', 'Prepare agenda'],
+      urgency_score: 6
+    }
+  },
+  {
+    id: '4',
+    subject: 'Meeting Request - Q1 Strategy',
+    participants: ['strategy@company.com', 'ceo@company.com'],
+    snippet: 'Strategic planning for Q1 initiatives...',
+    last_message_date: '2024-01-12T16:45:00Z',
+    message_count: 6,
+    thread_id: 'thread_4',
+    analysis: {
+      category: 'Internal',
+      topic: 'Q1 Strategy Planning',
+      sentiment: 'Neutral',
+      summary: 'Strategic planning discussion',
+      action_items: ['Review objectives', 'Align on priorities'],
+      urgency_score: 7
+    }
+  },
+  {
+    id: '5',
+    subject: 'Customer Support Issue #1234',
+    participants: ['support@company.com', 'customer@client.com'],
+    snippet: 'Customer experiencing login issues with our platform...',
+    last_message_date: '2024-01-11T11:30:00Z',
+    message_count: 15,
+    thread_id: 'thread_5',
+    analysis: {
+      category: 'Support',
+      topic: 'Login Authentication Issues',
+      sentiment: 'Negative',
+      summary: 'Customer login problem resolution',
+      action_items: ['Debug authentication', 'Update customer'],
+      urgency_score: 8
+    }
+  },
+  {
+    id: '6',
+    subject: 'Technical Support - API Integration',
+    participants: ['dev@company.com', 'partner@integration.com'],
+    snippet: 'Having trouble with the API integration documentation...',
+    last_message_date: '2024-01-10T13:20:00Z',
+    message_count: 9,
+    thread_id: 'thread_6',
+    analysis: {
+      category: 'Support',
+      topic: 'API Integration Support',
+      sentiment: 'Neutral',
+      summary: 'API integration troubleshooting',
+      action_items: ['Update documentation', 'Provide code examples'],
+      urgency_score: 5
+    }
+  },
+  {
+    id: '7',
+    subject: 'Marketing Campaign - Q1 Launch',
+    participants: ['marketing@company.com', 'agency@creative.com'],
+    snippet: 'Finalizing the creative assets for our Q1 campaign...',
+    last_message_date: '2024-01-09T15:10:00Z',
+    message_count: 7,
+    thread_id: 'thread_7',
+    analysis: {
+      category: 'Marketing',
+      topic: 'Q1 Marketing Campaign',
+      sentiment: 'Positive',
+      summary: 'Campaign planning and asset creation',
+      action_items: ['Approve final designs', 'Set launch date'],
+      urgency_score: 7
+    }
+  },
+  {
+    id: '8',
+    subject: 'Social Media Strategy Discussion',
+    participants: ['social@company.com', 'influencer@media.com'],
+    snippet: 'Exploring partnership opportunities for social media...',
+    last_message_date: '2024-01-08T10:45:00Z',
+    message_count: 5,
+    thread_id: 'thread_8',
+    analysis: {
+      category: 'Marketing',
+      topic: 'Social Media Partnership Strategy',
+      sentiment: 'Positive',
+      summary: 'Social media collaboration discussion',
+      action_items: ['Draft partnership agreement', 'Plan content calendar'],
+      urgency_score: 4
+    }
+  }
+];
+
 export function Categories() {
-  const { conversations, loading, error } = useConversationAnalysis();
+  // Use dummy data instead of real API
+  const conversations = dummyConversations;
+  const loading = false;
+  const error = null;
   const categoryGroups = useTopicClustering(conversations);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
