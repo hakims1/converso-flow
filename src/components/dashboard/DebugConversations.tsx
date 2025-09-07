@@ -249,7 +249,7 @@ export function DebugConversations() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
-                    <span>{format(new Date(analysis.processed_at), 'MMM d, yyyy HH:mm')}</span>
+                    <span>{format(new Date(analysis.conversations?.last_message_date || analysis.processed_at), 'MMM d, yyyy HH:mm')}</span>
                     {analysis.conversations?.thread_id && (
                       <Button asChild variant="outline" size="sm" className="ml-2">
                         <a
