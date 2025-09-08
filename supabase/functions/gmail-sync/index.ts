@@ -24,7 +24,7 @@ interface GmailThread {
   messages: GmailMessage[]
 }
 
-const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL','CATEGORY_UPDATES']);
+const BLOCKED_CATEGORIES = new Set(['CATEGORY_PROMOTIONS','CATEGORY_SOCIAL']);
 
 // Encryption utilities
 async function encryptText(text: string, key: string): Promise<{ encrypted: string; iv: string }> {
@@ -239,8 +239,8 @@ Deno.serve(async (req) => {
       // Build Gmail search query: since date and exclude promotions/social only
       const qParts: string[] = [];
       if (afterUnix > 0) qParts.push(`after:${afterUnix}`);
-      // Exclude broad promo/social categories; allow Updates to avoid hiding legit threads
-      qParts.push('-category:promotions', '-category:social', '-from:reply');
+      // Exclude broad promo/social categories only (no premature sender filtering)
+      qParts.push('-category:promotions', '-category:social');
       if (qParts.length > 0) url.searchParams.set('q', qParts.join(' '));
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 

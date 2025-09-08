@@ -223,7 +223,7 @@ while (attempt < 3) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 500,
+      max_tokens: 300,
       temperature: 0.1,
       messages: [
         { role: 'user', content: input },
@@ -232,7 +232,7 @@ while (attempt < 3) {
   })
 
   if (aiResp.status === 429 || aiResp.status >= 500) {
-    const waitMs = 300 * Math.pow(2, attempt - 1)
+    const waitMs = 1000 * Math.pow(2, attempt - 1)
     const txt = await aiResp.text()
     console.error(`Anthropic error (attempt ${attempt}):`, aiResp.status, txt)
     await new Promise((r) => setTimeout(r, waitMs))
@@ -277,7 +277,8 @@ const text = aiData?.content?.[0]?.text || ''
 
         results.push({ conversation_id: conv.id, success: true })
         processed += 1
-        await new Promise((r) => setTimeout(r, 120))
+        // Throttle to respect model token-per-minute limits
+        await new Promise((r) => setTimeout(r, 1500))
       } catch (e: any) {
         console.error('Unexpected analyze error:', e)
         results.push({ conversation_id: conv.id, success: false, error_code: 'UNEXPECTED', error_message: e?.message || String(e) })
@@ -325,7 +326,7 @@ const text = aiData?.content?.[0]?.text || ''
 
 function buildPrompt(conv: any, userName: string, userEmail: string): string {
   const rawContent = conv.full_content || conv.snippet || ''
-  const MAX_CONTENT_CHARS = 12000
+  const MAX_CONTENT_CHARS = 4000
   const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
   const subject = conv.subject || ''
   const participants = Array.isArray(conv.participants) ? conv.participants.join(', ') : ''
