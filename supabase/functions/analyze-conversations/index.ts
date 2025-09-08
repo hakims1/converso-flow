@@ -37,16 +37,18 @@ Deno.serve(async (req) => {
     const MASTER_ENCRYPTION_KEY = Deno.env.get('MASTER_ENCRYPTION_KEY') ?? ''
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('Analyze init error: missing Supabase envs', { hasUrl: !!SUPABASE_URL, hasService: !!SUPABASE_SERVICE_ROLE_KEY })
       return new Response(JSON.stringify({ success: false, error: 'SERVER_MISCONFIGURED' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        status: 200,
       })
     }
 
     if (!ANTHROPIC_API_KEY) {
+      console.error('Analyze init error: missing ANTHROPIC_API_KEY')
       return new Response(JSON.stringify({ success: false, error: 'MISSING_API_KEY' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        status: 200,
       })
     }
 
