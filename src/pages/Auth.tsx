@@ -40,11 +40,11 @@ const Auth = () => {
     handleAuthCallback();
   }, []);
 
-  // Redirect to dashboard when everything is ready
+  // Redirect to analyze page when everything is ready
   useEffect(() => {
     if (user && hasGmailAccess) {
       console.log('User authenticated with Gmail access, redirecting...');
-      navigate('/dashboard');
+      navigate('/analyze');
     }
   }, [user, hasGmailAccess, navigate]);
   const handleSignIn = async () => {
@@ -88,7 +88,7 @@ const Auth = () => {
                   </Alert> : hasGmailAccess ? <Alert className="border-green-200 bg-green-50">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                     <AlertDescription className="text-green-800">
-                      Gmail access confirmed! Redirecting to dashboard...
+                      Gmail access confirmed! Redirecting to analyze...
                     </AlertDescription>
                   </Alert> : needsPermission ? <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
