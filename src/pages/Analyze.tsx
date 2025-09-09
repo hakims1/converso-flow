@@ -3,15 +3,18 @@ import { Button } from '@/components/ui/button';
 import { Mail, MessageSquare, Users, Tags, BarChart3 } from 'lucide-react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { useToast } from '@/hooks/use-toast';
+import { useGmail } from '@/hooks/useGmail';
 
 export default function Analyze() {
   const navigate = useNavigate();
   const { analyzeConversations, loading } = useAnalysis();
   const { toast } = useToast();
-
+  const { syncGmail, loading: syncing } = useGmail();
   const handleAnalyze = async () => {
     try {
-      await analyzeConversations();
+      // Sync last 14 days (silent), then analyze since last
+      await syncGmail({ sinceDays: 14, maxThreads: 250, fullHistory: false, silent: true });
+      await analyzeConversations({ sinceLast: true, cutoffDays: 14, max: 75 });
       toast({
         title: "Analysis Complete",
         description: "Your emails have been analyzed successfully!",
@@ -25,7 +28,6 @@ export default function Analyze() {
       });
     }
   };
-
   const handleBack = () => {
     navigate('/');
   };
@@ -84,10 +86,10 @@ export default function Analyze() {
             size="lg" 
             className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground px-16 py-6 text-xl rounded-xl transition-all duration-200 hover:scale-105 shadow-lg inline-flex items-center gap-4"
             onClick={handleAnalyze}
-            disabled={loading}
+            disabled={loading || syncing}
           >
             <BarChart3 className="w-6 h-6" />
-            {loading ? 'Analyzing...' : 'Analyze Emails'}
+            {(loading || syncing) ? 'Analyzing...' : 'Analyze Emails'}
           </Button>
         </div>
 

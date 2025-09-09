@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
 
           const fullContent = collectText(lastMessage);
 
-          // Apply strict thread-level filters per requirements (skip ONLY if ALL messages are clearly non-conversational)
+          // Apply filtering: keep promotions skipped, ignore "unsubscribe" in quoted bodies, and keep threads with user participation
           const blockedInAllMessages = threadData.messages.every(m => (m.labelIds || []).some(id => BLOCKED_CATEGORIES.has(id)));
           const listUnsubInAllMessages = threadData.messages.every(m => (m.payload.headers || []).some(h => (h.name || '').toLowerCase() === 'list-unsubscribe'));
           const hasReplyInAddress = (fromValue: string) => {
@@ -386,37 +386,29 @@ Deno.serve(async (req) => {
             const fromVal = (m.payload.headers || []).find(h => (h.name || '').toLowerCase() === 'from')?.value || '';
             return hasReplyInAddress(fromVal);
           });
-          // Detect "unsubscribe" keyword within text/plain or text/html parts for each message
-          const unsubscribeInBodyInAllMessages = threadData.messages.every((m) => {
-            let plain = '';
-            let html = '';
-            const pushData = (mime?: string, data?: string) => {
-              if (!data) return;
-              const decoded = decode(data);
-              if (!decoded) return;
-              if (mime && mime.toLowerCase().includes('text/plain')) {
-                plain = prefer(plain, decoded);
-              } else if (mime && mime.toLowerCase().includes('text/html')) {
-                html = prefer(html, decoded);
-              }
-            };
-            const topMime = (m as any)?.payload?.mimeType as string | undefined;
-            pushData(topMime, m.payload?.body?.data);
-            const walk = (parts?: Array<any>) => {
-              if (!Array.isArray(parts)) return;
-              for (const p of parts) {
-                pushData(p?.mimeType, p?.body?.data);
-                if (Array.isArray(p?.parts)) walk(p.parts);
-              }
-            };
-            walk(m.payload?.parts as any);
-            const hasUnsub = plain.toLowerCase().includes('unsubscribe') || htmlToText(html).toLowerCase().includes('unsubscribe');
-            return hasUnsub;
+
+          // Detect if the authenticated user participated in the thread (sent any message)
+          const userParticipated = threadData.messages.some(m => {
+            const fromVal = (m.payload.headers || []).find(h => (h.name || '').toLowerCase() === 'from')?.value || '';
+            const emails = fromVal.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+            return emails.some((e) => e.toLowerCase() === userEmail);
           });
 
-          if (blockedInAllMessages || listUnsubInAllMessages || replySenderInAllMessages || unsubscribeInBodyInAllMessages) {
+          // Always skip if the latest message is categorized as promotions (defensive, in addition to query filter)
+          const lastHasPromotions = (lastLabels || []).some(id => id === 'CATEGORY_PROMOTIONS');
+
+          const shouldSkip = (!userParticipated && (blockedInAllMessages || listUnsubInAllMessages || replySenderInAllMessages))
+          
+          if (lastHasPromotions || shouldSkip) {
             const subjForLog = headers.find(h => h.name === 'Subject')?.value || '';
-            console.log(`Skipping thread ${threadData.id} due to strict-all filters`, { subjForLog, blockedInAllMessages, listUnsubInAllMessages, replySenderInAllMessages, unsubscribeInBodyInAllMessages });
+            console.log(`Skipping thread ${threadData.id}`, { 
+              subjForLog, 
+              reason: lastHasPromotions ? 'promotion_label_on_last' : 'non_conversational_all_messages',
+              blockedInAllMessages, 
+              listUnsubInAllMessages, 
+              replySenderInAllMessages, 
+              userParticipated 
+            });
             continue;
           }
 
