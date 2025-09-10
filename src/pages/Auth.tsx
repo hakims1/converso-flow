@@ -26,19 +26,34 @@ const Auth = () => {
     const handleAuthCallback = async () => {
       const url = new URL(window.location.href);
       const code = url.searchParams.get('code');
-      if (code) {
-        console.log('Processing OAuth callback...');
+      if (code && session?.provider_token && session?.provider_refresh_token) {
+        console.log('Processing OAuth callback and storing tokens...');
+        
         try {
-          await supabase.auth.exchangeCodeForSession(url.href);
-          // Clean URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          // Store the tokens securely
+          const { error } = await supabase.functions.invoke('gmail-tokens', {
+            body: {
+              access_token: session.provider_token,
+              refresh_token: session.provider_refresh_token,
+              expires_at: session.expires_at
+            }
+          });
+          
+          if (error) {
+            console.error('Failed to store Gmail tokens:', error);
+          } else {
+            console.log('Gmail tokens stored successfully');
+          }
         } catch (error) {
-          console.error('OAuth callback error:', error);
+          console.error('Error storing Gmail tokens:', error);
         }
+        
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     };
     handleAuthCallback();
-  }, []);
+  }, [session]);
 
   // Redirect to analyze page when everything is ready
   useEffect(() => {

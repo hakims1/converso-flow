@@ -19,7 +19,7 @@ export const useGmailAuth = () => {
 
   // Check if user has Gmail access
   const checkGmailAccess = async () => {
-    if (!session?.provider_token) {
+    if (!user) {
       setState({ hasGmailAccess: false, isChecking: false, needsPermission: true });
       return;
     }
@@ -27,21 +27,20 @@ export const useGmailAuth = () => {
     setState(prev => ({ ...prev, isChecking: true }));
 
     try {
-      // Test Gmail API access
+      // Test Gmail API access via server-side token management
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
         body: { 
-          test_only: true,
-          access_token: session.provider_token 
+          test_only: true
         }
       });
 
-      if (error || data?.error) {
+      if (error || (data?.error && data.error === 'GMAIL_PERMISSIONS_REQUIRED')) {
         console.log('Gmail access check failed:', error || data?.error);
         setState({ 
           hasGmailAccess: false, 
           isChecking: false, 
           needsPermission: true,
-          error: error?.message || data?.error 
+          error: error?.message || data?.message || 'Gmail permissions required'
         });
       } else {
         console.log('Gmail access confirmed');

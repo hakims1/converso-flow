@@ -55,11 +55,7 @@ export const useGmail = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('gmail-sync', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
         body: {
-          access_token: session.provider_token ?? '',
           full_history: fullHistory,
           since_days: sinceDays,
           max_threads: maxThreads,

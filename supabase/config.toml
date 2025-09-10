@@ -72,6 +72,9 @@ inspector_port = 54331
 [functions.gmail-sync]
 verify_jwt = true
 
+[functions.gmail-tokens]
+verify_jwt = true
+
 [functions.analyze-conversations]
 verify_jwt = true
 
