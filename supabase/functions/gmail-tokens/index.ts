@@ -11,10 +11,14 @@ async function encryptText(text: string, key: string): Promise<{ encrypted: stri
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
   
+  // Ensure key is exactly 32 bytes for AES-256-GCM
   const keyData = encoder.encode(key);
+  const keyBuffer = new Uint8Array(32);
+  keyBuffer.set(keyData.slice(0, 32));
+  
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    keyData,
+    keyBuffer,
     { name: 'AES-GCM' },
     false,
     ['encrypt']
