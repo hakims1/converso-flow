@@ -21,17 +21,20 @@ const Auth = () => {
   } = useGmailAuth();
   const navigate = useNavigate();
 
-  // Handle OAuth callback
+  // Handle OAuth callback and store tokens
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      if (code && session?.provider_token && session?.provider_refresh_token) {
-        console.log('Processing OAuth callback and storing tokens...');
+    const handleTokenStorage = async () => {
+      // Check if we have a session with provider tokens (Gmail OAuth)
+      if (session?.provider_token && session?.provider_refresh_token && user) {
+        console.log('Processing OAuth tokens and storing them...', {
+          hasAccessToken: !!session.provider_token,
+          hasRefreshToken: !!session.provider_refresh_token,
+          expiresAt: session.expires_at
+        });
         
         try {
           // Store the tokens securely
-          const { error } = await supabase.functions.invoke('gmail-tokens', {
+          const { data, error } = await supabase.functions.invoke('gmail-tokens', {
             body: {
               access_token: session.provider_token,
               refresh_token: session.provider_refresh_token,
@@ -42,18 +45,24 @@ const Auth = () => {
           if (error) {
             console.error('Failed to store Gmail tokens:', error);
           } else {
-            console.log('Gmail tokens stored successfully');
+            console.log('Gmail tokens stored successfully', data);
           }
         } catch (error) {
           console.error('Error storing Gmail tokens:', error);
         }
         
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
+        // Clean URL of OAuth parameters
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('code') || url.searchParams.has('state')) {
+          url.searchParams.delete('code');
+          url.searchParams.delete('state');
+          window.history.replaceState({}, document.title, url.pathname);
+        }
       }
     };
-    handleAuthCallback();
-  }, [session]);
+    
+    handleTokenStorage();
+  }, [session, user]);
 
   // Redirect to analyze page when everything is ready
   useEffect(() => {
