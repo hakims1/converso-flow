@@ -183,6 +183,39 @@ export type Database = {
           },
         ]
       }
+      gmail_tokens: {
+        Row: {
+          created_at: string
+          encrypted_access_token: string | null
+          encrypted_refresh_token: string
+          encryption_iv: string
+          id: string
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_access_token?: string | null
+          encrypted_refresh_token: string
+          encryption_iv: string
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_access_token?: string | null
+          encrypted_refresh_token?: string
+          encryption_iv?: string
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           auto_purge_enabled: boolean | null
