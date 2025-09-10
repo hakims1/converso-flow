@@ -99,7 +99,7 @@ export function HeroSection({ onConnectGmail }: HeroSectionProps) {
 
           {/* Trust indicators */}
           <div className="mt-6 text-sm text-slate-500">
-            <p>✓ No credit card required • ✓ 30-day free trial • ✓ Cancel anytime</p>
+            <p>✓ Try for free • No credit card required</p>
           </div>
         </div>
       </div>
