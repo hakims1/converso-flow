@@ -10,6 +10,7 @@ interface Conversation {
   last_message_date: string;
   message_count: number;
   thread_id: string;
+  participant_avatars?: { [email: string]: string | null };
 }
 
 export function useConversations() {
@@ -32,7 +33,43 @@ export function useConversations() {
         throw dbError;
       }
 
-      setConversations(data || []);
+      const conversationsData = data || [];
+
+      // Extract all unique participant emails
+      const allEmails = new Set<string>();
+      conversationsData.forEach(conv => {
+        conv.participants?.forEach(email => allEmails.add(email));
+      });
+
+      // Fetch avatars for all participants
+      let avatarsMap: { [email: string]: string | null } = {};
+      if (allEmails.size > 0) {
+        try {
+          const { data: avatarData } = await supabase.functions.invoke('fetch-contact-avatars', {
+            body: { emails: Array.from(allEmails) }
+          });
+
+          if (avatarData?.avatars) {
+            avatarsMap = avatarData.avatars.reduce((acc: any, avatar: any) => {
+              acc[avatar.email] = avatar.avatar_url;
+              return acc;
+            }, {});
+          }
+        } catch (avatarError) {
+          console.warn('Failed to fetch avatars:', avatarError);
+        }
+      }
+
+      // Add avatars to conversations
+      const conversationsWithAvatars = conversationsData.map(conv => ({
+        ...conv,
+        participant_avatars: conv.participants?.reduce((acc: any, email) => {
+          acc[email] = avatarsMap[email] || null;
+          return acc;
+        }, {}) || {}
+      }));
+
+      setConversations(conversationsWithAvatars);
     } catch (err) {
       console.error('Error fetching conversations:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch conversations');

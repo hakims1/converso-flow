@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Mail, Search, Filter, MessageSquare, Calendar, User, Clock, RefreshCw, Zap } from "lucide-react";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useConversations } from "@/hooks/useConversations";
@@ -181,7 +182,18 @@ export function Conversations() {
                 <div key={conversation.id} className="border rounded-lg p-4 space-y-3 hover:bg-accent/50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <User className="h-8 w-8 text-muted-foreground" />
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage 
+                          src={conversation.participant_avatars?.[conversation.participants[0]] || undefined} 
+                          alt={conversation.participants[0] || 'Contact'} 
+                        />
+                        <AvatarFallback>
+                          {conversation.participants[0] 
+                            ? conversation.participants[0].charAt(0).toUpperCase()
+                            : 'U'
+                          }
+                        </AvatarFallback>
+                      </Avatar>
                       <div>
                         <div className="font-medium">{conversation.participants[0] || 'Unknown'}</div>
                         <div className="text-sm text-muted-foreground">
@@ -229,7 +241,9 @@ export function Conversations() {
               <div key={i} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <User className="h-8 w-8 text-muted-foreground" />
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback>C{i}</AvatarFallback>
+                    </Avatar>
                     <div>
                       <div className="font-medium">Sample Contact {i}</div>
                       <div className="text-sm text-muted-foreground">contact{i}@example.com</div>

@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           access_type: 'offline',
           prompt: 'consent' // Always request consent to ensure Gmail scope
         },
-        scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly'
+        scopes: 'email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/contacts.readonly'
       }
     });
   };

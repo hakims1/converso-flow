@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      contact_avatars: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversation_analysis: {
         Row: {
           action_items: Json | null
