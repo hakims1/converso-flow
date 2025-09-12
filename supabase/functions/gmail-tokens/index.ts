@@ -32,8 +32,8 @@ async function encryptText(text: string, key: string): Promise<{ encrypted: stri
   );
   
   return {
-    encrypted: Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join(''),
-    iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('')
+    encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    iv: btoa(String.fromCharCode(...iv))
   };
 }
 
