@@ -395,9 +395,9 @@ Category Guidelines:
 - other - can not be categorized within the other categories
 
 Completion Status Rules:
-1. If the most recent message is FROM Matt label as: "needs_followup" , UNLESS: Matt clearly concluded the conversation ("thanks", "confirmed", "done," etc.)
+1. If the most recent message in an incomplete conversation comes from someone other than the account holder, then it should be classified as "need_to_respond"
 
-2. If the most recent message was addressed TO Matt (especially if there is a question contained in the message) label as "need_to_respond" , UNLESS: It's clearly just an FYI or pure acknowledgment
+2. If the most recent message comes from the account holder, it should be classified as "needs_followup"
 
 3. IF there was a clear conclusion or acknowledgement, then the completion status will be "complete"
 
