@@ -11,14 +11,12 @@ async function encryptText(text: string, key: string): Promise<{ encrypted: stri
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
   
-  // Ensure key is exactly 32 bytes for AES-256-GCM
-  const keyData = encoder.encode(key);
-  const keyBuffer = new Uint8Array(32);
-  keyBuffer.set(keyData.slice(0, 32));
+  // Use same key derivation as gmail-sync for consistency
+  const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
   
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    keyBuffer,
+    keyData,
     { name: 'AES-GCM' },
     false,
     ['encrypt']
@@ -120,7 +118,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Gmail tokens stored successfully');
+    console.log('Gmail tokens stored successfully for user:', user.id);
 
     return new Response(
       JSON.stringify({ success: true }),
