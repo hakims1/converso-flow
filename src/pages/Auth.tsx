@@ -78,6 +78,22 @@ const Auth = () => {
       console.error('Sign in error:', error);
     }
   };
+
+  const handleManualRefresh = async () => {
+    if (user) {
+      console.log('Manually refreshing Gmail permissions...');
+      // Clear any existing tokens first
+      try {
+        await supabase.functions.invoke('gmail-tokens', {
+          body: { clear_tokens: true }
+        });
+      } catch (error) {
+        console.log('No existing tokens to clear');
+      }
+      // Then re-authenticate
+      await signInWithGoogle();
+    }
+  };
   return <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
         {/* Back to home link */}
@@ -132,6 +148,13 @@ const Auth = () => {
               </svg>
               {user && needsPermission ? 'Grant Gmail Access' : 'Continue with Google'}
             </Button>
+            
+            {/* Manual Refresh Button for stuck users */}
+            {user && needsPermission && (
+              <Button onClick={handleManualRefresh} variant="secondary" className="w-full" size="lg">
+                Refresh Permissions
+              </Button>
+            )}
             
             {/* Footer */}
             <div className="text-center text-xs text-muted-foreground">
