@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Encryption utility
-async function encryptText(text: string, key: string): Promise<{ encrypted: string; iv: string }> {
+// Encryption utility with shared IV
+async function encryptTextWithIV(text: string, key: string, iv: Uint8Array): Promise<{ encrypted: string; iv: string }> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
   
@@ -22,7 +22,6 @@ async function encryptText(text: string, key: string): Promise<{ encrypted: stri
     ['encrypt']
   );
   
-  const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     cryptoKey,
@@ -91,12 +90,15 @@ serve(async (req) => {
 
     console.log(`Storing Gmail tokens for user ${user.id}`);
 
-    // Encrypt tokens
-    const encryptedRefreshToken = await encryptText(refresh_token, encryptionKey);
+    // Encrypt tokens using shared IV for consistent decryption
+    const sharedIV = crypto.getRandomValues(new Uint8Array(12));
+    const sharedIVBase64 = btoa(String.fromCharCode(...sharedIV));
+    
+    const encryptedRefreshToken = await encryptTextWithIV(refresh_token, encryptionKey, sharedIV);
     let encryptedAccessToken = null;
     
     if (access_token) {
-      encryptedAccessToken = await encryptText(access_token, encryptionKey);
+      encryptedAccessToken = await encryptTextWithIV(access_token, encryptionKey, sharedIV);
     }
 
     // Store tokens in database
@@ -107,7 +109,7 @@ serve(async (req) => {
         encrypted_access_token: encryptedAccessToken?.encrypted || null,
         encrypted_refresh_token: encryptedRefreshToken.encrypted,
         token_expires_at: expires_at ? new Date(expires_at * 1000).toISOString() : null,
-        encryption_iv: encryptedRefreshToken.iv // Using same IV for both tokens for simplicity
+        encryption_iv: sharedIVBase64 // Shared IV for both tokens
       });
 
     if (upsertError) {
