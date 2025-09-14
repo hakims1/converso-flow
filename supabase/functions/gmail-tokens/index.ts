@@ -101,7 +101,7 @@ serve(async (req) => {
       encryptedAccessToken = await encryptTextWithIV(access_token, encryptionKey, sharedIV);
     }
 
-    // Store tokens in database
+    // Store tokens in database with conflict resolution
     const { error: upsertError } = await supabase
       .from('gmail_tokens')
       .upsert({
@@ -110,6 +110,8 @@ serve(async (req) => {
         encrypted_refresh_token: encryptedRefreshToken.encrypted,
         token_expires_at: expires_at ? new Date(expires_at * 1000).toISOString() : null,
         encryption_iv: sharedIVBase64 // Shared IV for both tokens
+      }, {
+        onConflict: 'user_id'
       });
 
     if (upsertError) {

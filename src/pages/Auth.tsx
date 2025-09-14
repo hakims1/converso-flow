@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Mail, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowLeft, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useGmailAuth } from '@/hooks/useGmailAuth';
 import { Link } from 'react-router-dom';
@@ -17,20 +17,25 @@ const Auth = () => {
   const {
     hasGmailAccess,
     isChecking,
-    needsPermission
+    needsPermission,
+    checkGmailAccess
   } = useGmailAuth();
   const navigate = useNavigate();
+  const [isStoringTokens, setIsStoringTokens] = useState(false);
+  const [tokenStorageComplete, setTokenStorageComplete] = useState(false);
 
   // Handle OAuth callback and store tokens
   useEffect(() => {
     const handleTokenStorage = async () => {
-      // Check if we have a session with provider tokens (Gmail OAuth)
-      if (session?.provider_token && session?.provider_refresh_token && user) {
+      // Check if we have a session with provider tokens (Gmail OAuth) and haven't stored them yet
+      if (session?.provider_token && session?.provider_refresh_token && user && !tokenStorageComplete && !isStoringTokens) {
         console.log('Processing OAuth tokens and storing them...', {
           hasAccessToken: !!session.provider_token,
           hasRefreshToken: !!session.provider_refresh_token,
           expiresAt: session.expires_at
         });
+        
+        setIsStoringTokens(true);
         
         try {
           // Store the tokens securely
@@ -46,9 +51,17 @@ const Auth = () => {
             console.error('Failed to store Gmail tokens:', error);
           } else {
             console.log('Gmail tokens stored successfully', data);
+            setTokenStorageComplete(true);
+            
+            // Wait a moment for tokens to be fully stored, then check Gmail access
+            setTimeout(() => {
+              checkGmailAccess();
+            }, 1000);
           }
         } catch (error) {
           console.error('Error storing Gmail tokens:', error);
+        } finally {
+          setIsStoringTokens(false);
         }
         
         // Clean URL of OAuth parameters
@@ -62,7 +75,7 @@ const Auth = () => {
     };
     
     handleTokenStorage();
-  }, [session, user]);
+  }, [session, user, tokenStorageComplete, isStoringTokens, checkGmailAccess]);
 
   // Redirect to analyze page when everything is ready
   useEffect(() => {
@@ -120,8 +133,13 @@ const Auth = () => {
           <CardContent className="space-y-6">
             {/* Status Messages */}
             {user && <div className="space-y-4">
-                {isChecking ? <Alert>
-                    <AlertCircle className="h-4 w-4" />
+                {isStoringTokens ? <Alert>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertDescription>
+                      Storing Gmail permissions securely...
+                    </AlertDescription>
+                  </Alert> : isChecking ? <Alert>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     <AlertDescription>
                       Checking Gmail permissions...
                     </AlertDescription>
