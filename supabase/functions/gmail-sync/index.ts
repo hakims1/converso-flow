@@ -336,8 +336,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build search query - Keep promotions excluded
-    let query = `-category:promotions -category:social`;
+    // Build search query with comprehensive automated email filters
+    let query = `-category:promotions -category:social -category:forums -category:updates -from:noreply -from:no-reply -from:donotreply -from:notifications -subject:"unsubscribe" -subject:"confirmation" -subject:"receipt"`;
     
     if (!fullHistory) {
       const dateFilter = new Date();
@@ -430,7 +430,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Check if thread should be skipped
+        // Comprehensive automated email detection
         const allLabels = new Set<string>();
         const allMessages = threadData.messages;
         
@@ -440,21 +440,61 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Skip threads with blocked categories (promotions/social)
-        const hasBlockedCategory = [...allLabels].some(label => BLOCKED_CATEGORIES.has(label));
-        if (hasBlockedCategory) {
-          console.log(`Thread ${thread.id}: Skipped - contains blocked category`);
-          continue;
-        }
+        // Check message headers for automated email indicators
+        const automatedHeaders = [
+          'list-unsubscribe', 'list-id', 'list-help', 'list-subscribe',
+          'precedence: bulk', 'precedence: junk', 'x-auto-response-suppress',
+          'auto-submitted', 'x-mailer: mailchimp', 'x-campaign-id'
+        ];
 
-        // Skip automated threads (but only if user didn't participate)
-        const listUnsubInAllMessages = allMessages.every(msg => {
-          const bodyContent = extractTextFromMessage(msg).toLowerCase();
-          return bodyContent.includes('list-unsubscribe') || bodyContent.includes('unsubscribe');
+        // Check if ANY message in thread has these headers
+        const hasAutomatedHeaders = allMessages.some(msg => 
+          automatedHeaders.some(header => 
+            msg.payload.headers.some(h => 
+              h.name.toLowerCase().includes(header.toLowerCase())
+            )
+          )
+        );
+
+        // Check message body/subject for automated patterns
+        const automatedPatterns = [
+          /unsubscribe/i, /opt[- ]?out/i, /manage.{0,20}preference/i,
+          /this.{0,20}automated.{0,20}message/i, /do.{0,10}not.{0,10}reply/i,
+          /order.{0,10}confirmation/i, /receipt.{0,10}#/i,
+          /tracking.{0,10}number/i, /shipping.{0,10}notification/i,
+          /password.{0,10}reset/i, /verification.{0,10}code/i,
+          /account.{0,10}statement/i, /invoice.{0,10}#/i
+        ];
+
+        const hasAutomatedContent = allMessages.some(msg => 
+          automatedPatterns.some(pattern => {
+            const subjectHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'subject');
+            const subject = subjectHeader?.value || '';
+            const body = extractTextFromMessage(msg);
+            return pattern.test(subject) || pattern.test(body);
+          })
+        );
+
+        // Check for automated sender domains
+        const automatedDomains = [
+          'mailchimp.com', 'constantcontact.com', 'sendgrid.net',
+          'amazonses.com', 'notifications.google.com', 'github.com',
+          'linkedin.com', 'facebook.com', 'twitter.com', 'instagram.com'
+        ];
+
+        const hasAutomatedSender = allMessages.some(msg => {
+          const fromHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'from');
+          const fromValue = fromHeader?.value || '';
+          return automatedDomains.some(domain => fromValue.includes(domain));
         });
 
-        if (listUnsubInAllMessages && !userParticipated) {
-          console.log(`Thread ${thread.id}: Skipped - automated thread with no user participation`);
+        // Skip thread if ANY automated indicator is found
+        const shouldSkip = hasAutomatedHeaders || 
+                           hasAutomatedContent || 
+                           hasAutomatedSender;
+
+        if (shouldSkip) {
+          console.log(`Skipping automated thread: ${thread.id}`);
           continue;
         }
 
