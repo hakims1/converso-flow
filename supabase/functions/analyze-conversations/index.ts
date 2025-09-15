@@ -395,17 +395,19 @@ Category Guidelines:
 - other - can not be categorized within the other categories
 
 Completion Status Rules:
-1. Most recent message FROM primary app user → "needs_followup" 
-   UNLESS: primary app user clearly concluded the conversation (thanks, confirmed, done, etc.)
+Analyze ONLY the most recent message in the conversation to determine completion status:
 
-2. Most recent message TO primary app user (especially if there is a question contained in the message) → "need_to_respond"
+1. Most recent message FROM ${userName} → "needs_followup" 
+   UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
+
+2. Most recent message TO ${userName} (especially if there is a question contained in the message) → "need_to_respond"
    UNLESS: It's clearly just an FYI or pure acknowledgment
 
 3. Either case with clear resolution → "complete"
 
 CONCLUSION INDICATORS:
 - "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
-- Statements where primary app user commits to future action without asking for response
+- Statements where ${userName} commits to future action without asking for response
 
 Number of communications:
 This is simply the number of times a communication was made by any participant of the email thread. (I.e. if it's an email that was sent and never replied to, the Number of communications = 1)
