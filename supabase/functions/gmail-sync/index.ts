@@ -456,24 +456,27 @@ Deno.serve(async (req) => {
           )
         );
 
-        // Check message body/subject for automated patterns
+        // Only check marketing terms in the most recent message for single-message threads
         const automatedPatterns = [
           /unsubscribe/i, /opt[- ]?out/i, /manage.{0,20}preference/i,
+          /newsletter/i, /campaign/i, /promotional/i,
           /this.{0,20}automated.{0,20}message/i, /do.{0,10}not.{0,10}reply/i,
           /order.{0,10}confirmation/i, /receipt.{0,10}#/i,
           /tracking.{0,10}number/i, /shipping.{0,10}notification/i,
-          /password.{0,10}reset/i, /verification.{0,10}code/i,
-          /account.{0,10}statement/i, /invoice.{0,10}#/i
+          /password.{0,10}reset/i, /verification.{0,10}code/i
         ];
 
-        const hasAutomatedContent = allMessages.some(msg => 
+        // Get the most recent message (last in the array)
+        const mostRecentMessage = allMessages[allMessages.length - 1];
+
+        // Only apply marketing term filtering to single-message threads
+        const hasAutomatedContent = allMessages.length === 1 && 
           automatedPatterns.some(pattern => {
-            const subjectHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'subject');
+            const subjectHeader = mostRecentMessage.payload.headers.find(h => h.name.toLowerCase() === 'subject');
             const subject = subjectHeader?.value || '';
-            const body = extractTextFromMessage(msg);
+            const body = extractTextFromMessage(mostRecentMessage);
             return pattern.test(subject) || pattern.test(body);
-          })
-        );
+          });
 
         // Check for automated sender domains
         const automatedDomains = [
