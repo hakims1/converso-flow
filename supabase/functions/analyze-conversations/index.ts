@@ -395,19 +395,40 @@ Category Guidelines:
 - other - can not be categorized within the other categories
 
 Completion Status Rules:
-Analyze ONLY the most recent message in the conversation to determine completion status:
+CRITICAL: You MUST carefully identify who sent the most recent message to determine completion status correctly.
 
-1. Most recent message FROM ${userName} → "needs_followup" 
-   UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
+STEP-BY-STEP PROCESS:
+1. IDENTIFY THE MOST RECENT MESSAGE: Look at the email conversation chronologically - the LAST message in the thread
+2. DETERMINE WHO SENT IT: Check if the sender is ${userName} (${userEmail}) or someone else
+3. SHOW YOUR REASONING: In your analysis, explain who sent the most recent message and why you chose the completion status
 
-2. Most recent message TO ${userName} (especially if there is a question contained in the message) → "need_to_respond"
-   UNLESS: It's clearly just an FYI or pure acknowledgment
+EMAIL FORMAT GUIDE:
+- Emails are typically shown with the newest message FIRST or LAST in the conversation
+- Look for "From:" headers, email addresses, or signature lines to identify the sender
+- The most recent message determines the completion status
+
+COMPLETION STATUS LOGIC:
+
+1. Most recent message FROM ${userName} (${userEmail}) → "needs_followup"
+   - ${userName} sent the last message and is waiting for a response
+   - UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
+
+2. Most recent message TO ${userName} (from someone else) → "need_to_respond"  
+   - Someone else sent the last message and ${userName} should respond
+   - ESPECIALLY if there's a question, request, or call-to-action
+   - UNLESS: It's clearly just an FYI or pure acknowledgment
 
 3. Either case with clear resolution → "complete"
+
+FALLBACK RULE: If you're uncertain about who sent the most recent message, default to "need_to_respond" to ensure important messages aren't missed.
 
 CONCLUSION INDICATORS:
 - "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
 - Statements where ${userName} commits to future action without asking for response
+- Clear project completion or deal closure statements
+
+DEBUGGING REQUIREMENT: 
+In your analysis reasoning, briefly explain: "Most recent message from [sender name/email] shows [completion status] because [reason]"
 
 Action Items Detection:
 - Only include specific, actionable tasks with clear ownership
@@ -526,7 +547,8 @@ OUTPUT FORMAT:
   "action_items": ["specific task 1", "specific task 2"],
   "urgency_score": 5,
   "key_contacts": ["name1", "name2"],
-  "suggested_response": "brief suggested reply or null if no response needed"
+  "suggested_response": "brief suggested reply or null if no response needed",
+  "reasoning": "Most recent message from [sender] shows [completion_status] because [brief explanation]"
 }`
 
   return `${systemInstructions}\n\n${analysisPrompt}`
