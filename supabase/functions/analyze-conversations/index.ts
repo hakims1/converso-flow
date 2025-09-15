@@ -409,9 +409,6 @@ CONCLUSION INDICATORS:
 - "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
 - Statements where ${userName} commits to future action without asking for response
 
-Number of communications:
-This is simply the number of times a communication was made by any participant of the email thread. (I.e. if it's an email that was sent and never replied to, the Number of communications = 1)
-
 Action Items Detection:
 - Only include specific, actionable tasks with clear ownership
 - Include deadlines if mentioned
@@ -505,7 +502,6 @@ Output:
   "topic": "Peachscore Cohort 22 Application",
   "sentiment": "positive",
   "completion_status": "need_to_respond",
-  "number_of_communications": 4,
   "summary": "Francisco is interested in the Peachscore program and is reviewing the opportunity. He has questions about registration and is expecting to make a decision soon.",
   "action_items": [
     "Francisco to review opportunity in principal meeting",
