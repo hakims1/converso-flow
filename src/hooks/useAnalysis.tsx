@@ -13,13 +13,20 @@ export interface AnalysisInvokeResult {
   message?: string;
 }
 
+interface AnalysisOptions {
+  max?: number;
+  sinceLast?: boolean;
+  cutoffDays?: number;
+  onProgress?: (processed: number, total: number, status?: string) => void;
+}
+
 export const useAnalysis = () => {
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState<AnalysisInvokeResult | null>(null);
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const analyzeConversations = async (opts?: { max?: number; sinceLast?: boolean; cutoffDays?: number }) => {
+  const analyzeConversations = async (opts?: AnalysisOptions) => {
     if (!session) {
       toast({
         title: 'Sign in required',
@@ -30,14 +37,17 @@ export const useAnalysis = () => {
     }
 
     setLoading(true);
+    
+    opts?.onProgress?.(0, opts?.max || 25, 'Starting analysis...');
+    
     try {
       const { data, error } = await supabase.functions.invoke('analyze-conversations', {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: {
-          max_to_analyze: opts?.max ?? 75,
+          max_to_analyze: opts?.max ?? 25,
           since_last: opts?.sinceLast ?? false,
           respect_tier: false,
-          cutoff_days: opts?.cutoffDays ?? 180,
+          cutoff_days: opts?.cutoffDays ?? 14,
         },
       });
 
@@ -49,6 +59,7 @@ export const useAnalysis = () => {
       setLastResult(res);
 
       if (res.success) {
+        opts?.onProgress?.(res.processed || 0, res.processed || 0, 'Analysis complete!');
         const failed = res.results?.filter((r) => !r.success).length ?? 0;
         toast({
           title: 'Analysis complete',

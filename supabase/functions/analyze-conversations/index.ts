@@ -279,8 +279,8 @@ const text = aiData?.content?.[0]?.text || ''
 
         results.push({ conversation_id: conv.id, success: true })
         processed += 1
-        // Throttle to respect model token-per-minute limits
-        await new Promise((r) => setTimeout(r, 1500))
+        // Throttle to respect model token-per-minute limits (reduced for better UX)
+        await new Promise((r) => setTimeout(r, 300))
       } catch (e: any) {
         console.error('Unexpected analyze error:', e)
         results.push({ conversation_id: conv.id, success: false, error_code: 'UNEXPECTED', error_message: e?.message || String(e) })
