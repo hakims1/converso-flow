@@ -339,56 +339,35 @@ function buildPrompt(conv: any, userName: string, userEmail: string): string {
 SECURITY GUARDRAIL SYSTEM INSTRUCTIONS:
 - NEVER include sensitive personal information (SSN, credit cards, passwords, private keys) in your analysis
 - ALWAYS redact or generalize financial amounts, account numbers, and proprietary business details
-- FOCUS on communication patterns and action items rather than sensitive content details
-- LIMIT suggested responses to professional, non-sensitive topics only
-- IF you encounter highly sensitive data, provide only high-level category analysis
 
 ANALYSIS PERSPECTIVE:
 - Always analyze from the main user's perspective (the person whose email account is being analyzed)
 - Focus on helping the user identify what requires their response or needs follow-up to extract a response from the recipient.
-- Provide actionable insights for relationship and opportunity management
-
-RESPONSE GUIDELINES:
-- Keep suggestions brief and actionable
-- Match the tone of the main user's messages in the conversation
-- Always use a human tone
-- If uncertain about what to say, use professional but friendly language appropriate for business communications
-- Only suggest responses for "need_to_respond" or "needs_followup" status
 
 OUTPUT REQUIREMENTS:
 - Return ONLY valid JSON format
 - No additional text or explanations outside the JSON
-- Follow the exact JSON structure provided
-- MINIMIZE sensitive data in output - focus on actionable insights only`
+- Follow the exact JSON structure provided`
 
   const analysisPrompt = `Analyze this email conversation and provide insights in JSON format. Follow these specific guidelines:
 
-Analyze these emails as if you are an assistant helping the main user keep track of email conversations that need attention. With many outgoing and incoming emails from several different entities, help the user identify opportunities and communications that haven't been completed.
+Analyze these emails to help the main user identify action opportunities within their email conversation history. 
 
 CRITICAL: MAIN USER IDENTIFICATION
 The main user whose perspective we are analyzing is: ${userName} (${userEmail})
 - ALL analysis must be from ${userName}'s perspective
 - ALL completion status determinations are about what ${userName} needs to do
-- ALL suggested responses should be written as if ${userName} is responding
-- When determining "need_to_respond" vs "needs_followup", ask: "What does ${userName} need to do next?"
 
 CONVERSATION: ${content}
 
 ANALYSIS INSTRUCTIONS:
 
-Sentiment Analysis Guidelines:
-- Focus on the FINAL sentiment of the conversation from the person who sent the most recent email, not all individual emails
-- "positive" = agreement, satisfaction, successful resolution, enthusiasm
-- "negative" = disagreement, dissatisfaction, complaints, rejection
-- "frustrated" = repeated issues, delays, misunderstandings, impatience
-- "neutral" = informational, factual, no strong emotion
-
 Topic Guidelines:
-Try to summarize the subject of the email in 5 words max, but you can use more words if absolutely necessary.
+Summarize the subject of the email in 6 words; can use more words if necessary.
 
 Category Guidelines:
 - product - any communication that revolves around the product or service that the person does
-- sales/marketing - any communications that involve selling the product or trying to make money or acquire users or sales
+- sales/marketing - any communications that involve selling or promoting the product or trying to make money or acquire users or sales
 - support - Any communications about the product from external recipients or 3rd parties, particularly users of the product
 - solicitations - Unsolicited messages from contacts whom I, as the main user, have never sent an email to
 - partnership - attempts to build relationship with someone in order to utilize their skills or community or similar for the businesses' gain
@@ -402,23 +381,18 @@ STEP-BY-STEP PROCESS:
 2. DETERMINE WHO SENT IT: Check if the sender is ${userName} (${userEmail}) or someone else
 3. SHOW YOUR REASONING: In your analysis, explain who sent the most recent message and why you chose the completion status
 
-EMAIL FORMAT GUIDE:
-- Emails are typically shown with the newest message FIRST or LAST in the conversation
-- Look for "From:" headers, email addresses, or signature lines to identify the sender
-- The most recent message determines the completion status
-
 COMPLETION STATUS LOGIC:
 
-1. Most recent message FROM ${userName} (${userEmail}) → "needs_followup"
+1. "needs_followup" --> Most recent message is FROM ${userName} (${userEmail}) 
    - ${userName} sent the last message and is waiting for a response
    - UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
 
-2. Most recent message TO ${userName} (from someone else) → "need_to_respond"  
+2. "need_to_respond" --> Most recent message TO ${userName} (from someone else)  
    - Someone else sent the last message and ${userName} should respond
    - ESPECIALLY if there's a question, request, or call-to-action
    - UNLESS: It's clearly just an FYI or pure acknowledgment
 
-3. Either case with clear resolution → "complete"
+3. "complete" -->Either case with clear resolution 
 
 FALLBACK RULE: If you're uncertain about who sent the most recent message, default to "need_to_respond" to ensure important messages aren't missed.
 
