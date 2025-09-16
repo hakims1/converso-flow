@@ -555,16 +555,12 @@ Deno.serve(async (req) => {
 
         const retentionDays = profileData?.email_retention_days || 30;
 
-        // Extract and encrypt email content
-        const fullContent = threadData.messages.map(msg => {
-          const content = extractTextFromMessage(msg);
-          const fromHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'from');
-          const dateHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'date');
-          
-          return `From: ${fromHeader?.value || 'Unknown'}\nDate: ${dateHeader?.value || 'Unknown'}\n\n${content}`;
-        }).join('\n\n---\n\n');
+        // Extract and clean content from ONLY the most recent message (which contains full history)
+        const mostRecentMessage = threadData.messages[threadData.messages.length - 1];
+        const rawContent = extractTextFromMessage(mostRecentMessage);
+        const cleanedContent = cleanEmailContent(rawContent);
 
-        const { encrypted: encryptedContent, iv } = await encryptText(fullContent, masterEncryptionKey);
+        const { encrypted: encryptedContent, iv } = await encryptText(cleanedContent, masterEncryptionKey);
 
         // Calculate expiry date
         const expiryDate = new Date();
@@ -590,7 +586,7 @@ Deno.serve(async (req) => {
           from: participants.size > 0 ? Array.from(participants)[0] : 'Unknown',
           date: lastMessageDate.toISOString(),
           snippet: firstMessage.snippet || '',
-          content: fullContent.substring(0, 500) + (fullContent.length > 500 ? '...' : ''),
+          content: cleanedContent.substring(0, 500) + (cleanedContent.length > 500 ? '...' : ''),
           labels: Array.from(allLabels),
           url: `https://mail.google.com/mail/u/0/#inbox/${thread.id}`
         });
@@ -636,6 +632,55 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// Helper function to clean email content by removing signatures and extracting recent messages
+function cleanEmailContent(rawContent: string): string {
+  // Remove HTML tags
+  let content = rawContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // Extract the 3 most recent messages using the Gmail threading pattern
+  // Pattern: "On DATE at TIME, USER NAME <EMAIL> wrote:"
+  const messagePattern = /On .+ at .+, .+ <.+@.+> wrote:/gi;
+  const messageSplits = content.split(messagePattern);
+  
+  // Take only the first 4 parts (original + 3 most recent replies)
+  // Index 0 is the most recent, subsequent indices are older messages
+  const recentMessages = messageSplits.slice(0, 4);
+  
+  // Clean each message by removing signatures
+  const cleanedMessages = recentMessages.map(msg => removeEmailSignature(msg.trim())).filter(msg => msg.length > 10);
+  
+  // Rejoin the messages, limiting to 1500 characters total
+  const result = cleanedMessages.join('\n\n---\n\n');
+  return result.length > 1500 ? result.substring(0, 1500) + '...' : result;
+}
+
+// Helper function to remove email signatures
+function removeEmailSignature(content: string): string {
+  // Common signature patterns
+  const signaturePatterns = [
+    /--\s*$/m,  // Standard signature delimiter
+    /Best regards,[\s\S]*$/im,
+    /Sincerely,[\s\S]*$/im,
+    /Thanks,[\s\S]*$/im,
+    /Sent from my \w+/i,
+    /Get Outlook for \w+/i,
+    /This email was sent from .*/i,
+    /CONFIDENTIAL[\s\S]*$/im,
+    /DISCLAIMER[\s\S]*$/im,
+    /This message and any attachments[\s\S]*$/im
+  ];
+  
+  let cleaned = content;
+  for (const pattern of signaturePatterns) {
+    cleaned = cleaned.replace(pattern, '').trim();
+  }
+  
+  // Remove excessive whitespace and empty lines
+  cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+  
+  return cleaned;
+}
 
 // Helper function to extract text from Gmail message
 function extractTextFromMessage(message: GmailMessage): string {

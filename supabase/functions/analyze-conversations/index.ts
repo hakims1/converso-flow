@@ -328,7 +328,7 @@ const text = aiData?.content?.[0]?.text || ''
 
 function buildPrompt(conv: any, userName: string, userEmail: string): string {
   const rawContent = conv.full_content || conv.snippet || ''
-  const MAX_CONTENT_CHARS = 4000
+  const MAX_CONTENT_CHARS = 1500
   const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
   const subject = conv.subject || ''
   const participants = Array.isArray(conv.participants) ? conv.participants.join(', ') : ''
