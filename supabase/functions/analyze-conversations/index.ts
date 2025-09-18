@@ -94,6 +94,8 @@ const since_last = body.since_last === true
 const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(1000, body.max_to_analyze)) : 75
 const cutoffDays = typeof body.cutoff_days === 'number' ? Math.max(1, Math.min(365, body.cutoff_days)) : 180
 
+console.log(`Analysis request: max=${requestedMax}, sinceLast=${since_last}, model=${model}, cutoffDays=${cutoffDays}`)
+
     const { data: history } = await supabaseAuthed
       .from('user_processing_history')
       .select('subscription_tier, monthly_limit, conversations_processed')
@@ -172,9 +174,15 @@ if (cutoffDays) {
       return new Date(lp).getTime() < new Date(c.last_message_date).getTime()
     })
 
-    // For free users, analyze ALL conversations within the 60-day window
+    // Limit free users to most recent 100 conversations
+    const freeUserLimit = 100
+    const effectiveMax = isFree ? Math.min(requestedMax, freeUserLimit) : requestedMax
+    
+    // For free users, analyze recent conversations within limit
     // For paid users, use the standard since_last logic
-    const toAnalyze = isFree ? conversations.slice(0, requestedMax) : candidates.slice(0, requestedMax)
+    const toAnalyze = isFree ? conversations.slice(0, effectiveMax) : candidates.slice(0, effectiveMax)
+    
+    console.log(`Found ${conversations.length} conversations, ${candidates.length} candidates, analyzing ${toAnalyze.length} conversations`)
 
     const results: AnalysisResult[] = []
     let processed = 0
@@ -211,11 +219,18 @@ if (cutoffDays) {
 
 const input = buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
 
+// Log token usage for debugging
+const estimatedTokens = Math.ceil(input.length / 4) // Rough estimate: 4 chars per token
+console.log(`Conversation ${conv.id}: prompt length=${input.length} chars, estimated=${estimatedTokens} tokens`)
+
 // Retry with exponential backoff for rate limits / transient errors
 let aiData: any = null
 let attempt = 0
+const startTime = Date.now()
 while (attempt < 3) {
   attempt++
+  console.log(`Attempting Claude API call for conversation ${conv.id} (attempt ${attempt}/3)`)
+  
   const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -243,12 +258,19 @@ while (attempt < 3) {
 
   if (!aiResp.ok) {
     const txt = await aiResp.text()
-    console.error('Anthropic error:', aiResp.status, txt)
-    results.push({ conversation_id: conv.id, success: false, error_code: 'MODEL_ERROR', error_message: txt })
-    break
+    console.error(`Anthropic error for conversation ${conv.id} (attempt ${attempt}):`, aiResp.status, txt)
+    
+    // If this is the final attempt, record the failure and continue to next conversation
+    if (attempt >= 3) {
+      results.push({ conversation_id: conv.id, success: false, error_code: 'MODEL_ERROR', error_message: txt })
+      break
+    }
+    continue // Retry
   }
 
   aiData = await aiResp.json()
+  const responseTime = Date.now() - startTime
+  console.log(`Claude API response for conversation ${conv.id}: ${responseTime}ms, usage: ${JSON.stringify(aiData.usage || {})}`)
   break
 }
 
@@ -279,6 +301,8 @@ const text = aiData?.content?.[0]?.text || ''
 
         results.push({ conversation_id: conv.id, success: true })
         processed += 1
+        console.log(`Successfully analyzed conversation ${conv.id} (${processed}/${toAnalyze.length})`)
+        
         // Throttle to respect model token-per-minute limits (reduced for better UX)
         await new Promise((r) => setTimeout(r, 300))
       } catch (e: any) {

@@ -70,7 +70,8 @@ export function DebugConversations() {
             last_message_date
           )
         `)
-        .limit(75); // Show 75 most recent analyzed conversations
+        .order('processed_at', { ascending: false })
+        .limit(150); // Show 150 most recent analyzed conversations
         
       if (fetchError) throw fetchError;
       
@@ -135,10 +136,10 @@ export function DebugConversations() {
                 
                 console.log('Gmail sync complete, starting analysis...');
                 
-                // Then analyze conversations (focusing on recent ones)
-                await analyzeConversations({ max: 75, sinceLast: true });
+                // Then analyze conversations (focusing on recent ones for free users)
+                await analyzeConversations({ max: 100, sinceLast: true });
                 // Auto-refresh after analysis completes
-                setTimeout(() => fetchAnalyses(), 2000);
+                setTimeout(() => fetchAnalyses(), 3000);
               }}
               disabled={analyzing}
               className="gap-2"
