@@ -467,14 +467,14 @@ Deno.serve(async (req) => {
         ];
 
         // Get the most recent message (last in the array)
-        const mostRecentMessage = allMessages[allMessages.length - 1];
+        const latestMessage = allMessages[allMessages.length - 1];
 
         // Only apply marketing term filtering to single-message threads
         const hasAutomatedContent = allMessages.length === 1 && 
           automatedPatterns.some(pattern => {
-            const subjectHeader = mostRecentMessage.payload.headers.find(h => h.name.toLowerCase() === 'subject');
+            const subjectHeader = latestMessage.payload.headers.find(h => h.name.toLowerCase() === 'subject');
             const subject = subjectHeader?.value || '';
-            const body = extractTextFromMessage(mostRecentMessage);
+            const body = extractTextFromMessage(latestMessage);
             return pattern.test(subject) || pattern.test(body);
           });
 
