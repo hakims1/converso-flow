@@ -70,7 +70,6 @@ export function DebugConversations() {
             last_message_date
           )
         `)
-        .order('processed_at', { ascending: false })
         .limit(150); // Show 150 most recent analyzed conversations
         
       if (fetchError) throw fetchError;
