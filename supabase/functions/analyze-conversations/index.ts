@@ -217,7 +217,13 @@ if (cutoffDays) {
           fullContent = conv.snippet || '';
         }
 
-const input = buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
+        // Detect if this is a single outgoing email from main user
+        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, user.email || '', conv.message_count || 1);
+        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}`)
+
+        const input = isSimpleOutreach 
+          ? buildSimplifiedPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
+          : buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
 
 // Log token usage for debugging
 const estimatedTokens = Math.ceil(input.length / 4) // Rough estimate: 4 chars per token
@@ -460,6 +466,72 @@ OUTPUT FORMAT:
   "key_contacts": ["name1", "name2"],
   "suggested_response": "brief suggested reply or null if no response needed",
   "reasoning": "Most recent message from [sender] shows [completion_status] because [brief explanation]"
+}`
+
+  return `${systemInstructions}\n\n${analysisPrompt}`
+}
+
+function isSingleOutgoingEmail(fullContent: string, userEmail: string, messageCount: number): boolean {
+  // Must have exactly 1 message
+  if (messageCount !== 1) return false;
+  
+  // Extract From header from email content
+  const fromHeaderMatch = fullContent.match(/From:\s*([^\n\r]+)/i);
+  if (!fromHeaderMatch) return false;
+  
+  const fromHeader = fromHeaderMatch[1];
+  
+  // Must be sent FROM the main user
+  return fromHeader.includes(userEmail);
+}
+
+function buildSimplifiedPrompt(conv: any, userName: string, userEmail: string): string {
+  const rawContent = conv.full_content || conv.snippet || ''
+  const MAX_CONTENT_CHARS = 1500
+  const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
+  const msgCount = conv.message_count || 1
+
+  const systemInstructions = `You are analyzing a single outgoing email from ${userName}
+
+ANALYSIS REQUIREMENTS:
+- This is a cold outreach email that has received no response yet
+- completion_status is automatically "needs_followup" 
+- Only analyze: category, topic, urgency_score
+- Keep analysis brief and focused
+
+OUTPUT REQUIREMENTS:
+- Return ONLY valid JSON format
+- No additional explanations outside the JSON`
+
+  const analysisPrompt = `Analyze this single outgoing email and provide basic insights in JSON format:
+
+CONVERSATION: ${content}
+
+ANALYSIS INSTRUCTIONS:
+
+Category Guidelines:
+- sales/marketing - trying to make money, acquire users, promote services
+- partnership - building relationships for business gain  
+- product - about the product/service offered
+- other - anything else
+
+Topic Guidelines: Summarize the email subject in 2-5 words
+
+Urgency Scoring:
+- 7-8: Time-sensitive opportunities, important prospects
+- 5-6: Standard outreach, routine business  
+- 3-4: General networking, non-urgent outreach
+- 1-2: Casual, low-priority communications
+
+OUTPUT FORMAT:
+{
+  "category": "one of: sales/marketing, partnership, product, other",
+  "topic": "2-5 word summary",  
+  "urgency_score": 5,
+  "completion_status": "needs_followup",
+  "number_of_communications": ${msgCount},
+  "summary": "Brief 1 sentence summary of outreach purpose",
+  "key_contacts": ["recipient name if identifiable"]
 }`
 
   return `${systemInstructions}\n\n${analysisPrompt}`
