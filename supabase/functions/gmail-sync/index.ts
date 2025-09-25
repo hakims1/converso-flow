@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
       const requestText = await req.text();
       if (requestText.trim()) {
         body = JSON.parse(requestText);
-        testOnly = body.test_only === true;
+        testOnly = (body as any).test_only === true;
       }
     } catch (jsonError) {
       console.log('No JSON body provided');
@@ -318,11 +318,11 @@ Deno.serve(async (req) => {
         );
       }
     } catch (error) {
-      console.error('Gmail API test failed:', error.message);
+      console.error('Gmail API test failed:', (error as Error)?.message);
       
       // Log the access attempt
       await logDataAccess(supabase, user.id, 'gmail_access_test', 'gmail_api', 0, {
-        error: error.message,
+        error: (error as Error)?.message,
         success: false
       });
       
@@ -330,7 +330,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           error: 'GMAIL_PERMISSIONS_REQUIRED', 
           message: 'Gmail access denied',
-          details: error.message 
+          details: (error as Error)?.message 
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

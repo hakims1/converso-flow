@@ -128,11 +128,11 @@ Deno.serve(async (req) => {
             newAvatars.push({ email, avatar_url: avatarUrl })
           } else {
             console.log(`No contact found for ${email}`)
-            newAvatars.push({ email, avatar_url: null })
+            newAvatars.push({ email, avatar_url: undefined })
           }
         } catch (error) {
           console.error(`Error fetching avatar for ${email}:`, error)
-          newAvatars.push({ email, avatar_url: null })
+          newAvatars.push({ email, avatar_url: undefined })
         }
       }
 

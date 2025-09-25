@@ -78,31 +78,52 @@ Deno.serve(async (req) => {
       // Delete all email contents for this user
       const { data: emailContents, error: fetchError } = await supabase
         .from('email_contents')
-        .select('id, conversation_id')
-        .in('conversation_id', 
-          supabase.from('conversations').select('id').eq('user_id', user.id)
+        .select('id, conversation_id');
+      
+      const { data: userConversations } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', user.id);
+      
+      const conversationIds = userConversations?.map(c => c.id) || [];
+      
+      if (!fetchError && emailContents && conversationIds.length > 0) {
+        const filteredEmailContents = emailContents.filter(ec => 
+          conversationIds.includes(ec.conversation_id)
         );
 
-      if (!fetchError && emailContents) {
-        const { error: deleteError } = await supabase
-          .from('email_contents')
-          .delete()
-          .in('conversation_id', 
-            supabase.from('conversations').select('id').eq('user_id', user.id)
-          );
+        if (filteredEmailContents.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('email_contents')
+            .delete()
+            .in('id', filteredEmailContents.map(ec => ec.id));
 
-        if (!deleteError) {
-          purgedCount = emailContents.length;
-          purgedUsers.add(user.id);
+          if (!deleteError) {
+            purgedCount = filteredEmailContents.length;
+            purgedUsers.add(user.id);
+          }
         }
       }
 
       // Also delete conversations and analysis
-      await supabase.from('conversation_analysis').delete().in('conversation_id',
-        supabase.from('conversations').select('id').eq('user_id', user.id)
-      );
+      const { data: userConversationsForDeletion } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', user.id);
       
-      await supabase.from('conversations').delete().eq('user_id', user.id);
+      const conversationIdsForDeletion = userConversationsForDeletion?.map(c => c.id) || [];
+      
+      if (conversationIdsForDeletion.length > 0) {
+        await supabase
+          .from('conversation_analysis')
+          .delete()
+          .in('conversation_id', conversationIdsForDeletion);
+        
+        await supabase
+          .from('conversations')
+          .delete()
+          .eq('user_id', user.id);
+      }
 
       // Log the complete purge
       await logDataAccess(
@@ -119,20 +140,30 @@ Deno.serve(async (req) => {
       const { data: expiredContent, error: fetchError } = await supabase
         .from('email_contents')
         .select('id, conversation_id')
-        .lt('expires_at', new Date().toISOString())
-        .in('conversation_id', 
-          supabase.from('conversations').select('id').eq('user_id', userId)
+        .lt('expires_at', new Date().toISOString());
+      
+      const { data: userConversationsForExpired } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', userId);
+      
+      const conversationIdsForExpired = userConversationsForExpired?.map(c => c.id) || [];
+      
+      if (!fetchError && expiredContent && expiredContent.length > 0 && conversationIdsForExpired.length > 0) {
+        const filteredExpiredContent = expiredContent.filter(ec => 
+          conversationIdsForExpired.includes(ec.conversation_id)
         );
 
-      if (!fetchError && expiredContent && expiredContent.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('email_contents')
-          .delete()
-          .in('id', expiredContent.map(c => c.id));
+        if (filteredExpiredContent.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('email_contents')
+            .delete()
+            .in('id', filteredExpiredContent.map(c => c.id));
 
-        if (!deleteError) {
-          purgedCount = expiredContent.length;
-          purgedUsers.add(userId);
+          if (!deleteError) {
+            purgedCount = filteredExpiredContent.length;
+            purgedUsers.add(userId);
+          }
         }
       }
 
@@ -197,7 +228,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Purge operation failed'
+        error: (error as Error)?.message || 'Purge operation failed'
       }),
       {
         status: 500,

@@ -23,7 +23,7 @@ async function encryptTextWithIV(text: string, key: string, iv: Uint8Array): Pro
   );
   
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as BufferSource },
     cryptoKey,
     data
   );
@@ -132,7 +132,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in gmail-tokens function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error)?.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
