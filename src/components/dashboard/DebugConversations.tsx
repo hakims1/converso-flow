@@ -10,10 +10,54 @@ import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, MessageSquare, Users, Calendar, Brain, AlertCircle, CheckCircle, Zap, Info, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
+interface ConversationAnalysis {
+  id: string;
+  conversation_id: string;
+  sentiment: string;
+  category: string;
+  topic: string | null;
+  summary: string | null;
+  completion_status: string;
+  action_items: string[];
+  key_contacts: string[];
+  urgency_score: number | null;
+  suggested_response: string | null;
+  processed_at: string;
+  conversation?: {
+    subject: string;
+    participants: string[];
+    message_count: number;
+    thread_id: string;
+    last_message_date: string;
+  };
+}
+
+interface AnalysisAttempt {
+  id: string;
+  conversation_id: string;
+  attempt_number: number;
+  status: 'pending' | 'success' | 'failed' | 'rate_limited';
+  error_message?: string;
+  error_code?: string;
+  claude_request_id?: string;
+  processing_time_ms?: number;
+  created_at: string;
+  completed_at?: string;
+  conversation?: {
+    subject: string;
+    participants: string[];
+    message_count: number;
+    thread_id: string;
+    last_message_date: string;
+  };
+}
+
 export function DebugConversations() {
-  const [analyses, setAnalyses] = useState<any[]>([]);
+  const [analyses, setAnalyses] = useState<ConversationAnalysis[]>([]);
+  const [attempts, setAttempts] = useState<AnalysisAttempt[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAttempts, setShowAttempts] = useState(false);
   const { loading: analyzing, analyzeConversations, lastResult } = useAnalysis();
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -27,10 +71,10 @@ export function DebugConversations() {
     return 5;
   };
 
-  const sortConversationsByPriority = (analyses: any[]): any[] => {
+  const sortConversationsByPriority = (analyses: ConversationAnalysis[]): ConversationAnalysis[] => {
     return [...analyses].sort((a, b) => {
-      const aMessageCount = a.conversations?.message_count || 1;
-      const bMessageCount = b.conversations?.message_count || 1;
+      const aMessageCount = a.conversation?.message_count || 1;
+      const bMessageCount = b.conversation?.message_count || 1;
       const aGroup = getMessageGroup(aMessageCount);
       const bGroup = getMessageGroup(bMessageCount);
       
@@ -47,8 +91,8 @@ export function DebugConversations() {
       }
       
       // Tertiary: Date (descending - more recent = higher priority)
-      const aDate = new Date(a.conversations?.last_message_date || a.processed_at);
-      const bDate = new Date(b.conversations?.last_message_date || b.processed_at);
+      const aDate = new Date(a.conversation?.last_message_date || a.processed_at);
+      const bDate = new Date(b.conversation?.last_message_date || b.processed_at);
       return bDate.getTime() - aDate.getTime();
     });
   };
@@ -58,25 +102,36 @@ export function DebugConversations() {
     setError(null);
     
     try {
-      const { data, error: fetchError } = await supabase
+      // Fetch successful analyses
+      const { data: analysisData, error: fetchError } = await supabase
         .from('conversation_analysis')
         .select(`
           *,
-          conversations (
-            subject,
-            participants,
-            thread_id,
-            message_count,
-            last_message_date
-          )
+          conversation:conversations(subject, participants, message_count, thread_id, last_message_date)
         `)
-        .limit(150); // Show 150 most recent analyzed conversations
+        .order('processed_at', { ascending: false });
         
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        throw fetchError;
+      }
       
-      // Apply sophisticated sorting
-      const sortedData = sortConversationsByPriority(data || []);
-      setAnalyses(sortedData);
+      // Fetch all analysis attempts
+      const { data: attemptsData, error: attemptsError } = await supabase
+        .from('conversation_analysis_attempts')
+        .select(`
+          *,
+          conversation:conversations(subject, participants, message_count, thread_id, last_message_date)
+        `)
+        .order('created_at', { ascending: false });
+        
+      if (attemptsError) {
+        throw attemptsError;
+      }
+      
+      // Sort by message count (descending), then urgency, then date
+      const sorted = sortConversationsByPriority(analysisData || []);
+      setAnalyses(sorted);
+      setAttempts(attemptsData || []);
     } catch (err) {
       console.error('Error fetching analyses:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch analyses');
@@ -94,6 +149,41 @@ export function DebugConversations() {
     return content.substring(0, maxLength) + "...";
   };
 
+  const handleFetchAndAnalyze = async () => {
+    console.log('Starting fetch and analysis workflow...');
+    
+    // First fetch latest emails from Gmail
+    const gmailResponse = await supabase.functions.invoke('gmail-sync', {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+      body: { 
+        access_token: session?.provider_token,
+        since_days: 7, // Fetch emails from last 7 days
+        max_threads: 100
+      }
+    });
+    
+    if (gmailResponse.error) {
+      toast({
+        title: 'Gmail sync failed',
+        description: gmailResponse.error.message || 'Failed to fetch latest emails',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    console.log('Gmail sync complete, starting analysis...');
+    
+    // Then analyze conversations (focusing on recent ones for free users)
+    await analyzeConversations({ max: 100, sinceLast: true });
+    // Auto-refresh after analysis completes
+    setTimeout(() => fetchAnalyses(), 3000);
+  };
+
+  const handleReanalyzeAll = async () => {
+    await analyzeConversations({ max: 5000, sinceLast: false });
+    setTimeout(() => fetchAnalyses(), 2000);
+  };
+
   return (
     <Card className="gradient-card shadow-card">
       <CardHeader>
@@ -107,72 +197,9 @@ export function DebugConversations() {
               Raw AI analysis output from Claude ({analyses.length} analyses)
             </CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                console.log('Starting fetch and analysis workflow...');
-                
-                // First fetch latest emails from Gmail
-                const gmailResponse = await supabase.functions.invoke('gmail-sync', {
-                  headers: { Authorization: `Bearer ${session?.access_token}` },
-                  body: { 
-                    access_token: session?.provider_token,
-                    since_days: 7, // Fetch emails from last 7 days
-                    max_threads: 100
-                  }
-                });
-                
-                if (gmailResponse.error) {
-                  toast({
-                    title: 'Gmail sync failed',
-                    description: gmailResponse.error.message || 'Failed to fetch latest emails',
-                    variant: 'destructive',
-                  });
-                  return;
-                }
-                
-                console.log('Gmail sync complete, starting analysis...');
-                
-                // Then analyze conversations (focusing on recent ones for free users)
-                await analyzeConversations({ max: 100, sinceLast: true });
-                // Auto-refresh after analysis completes
-                setTimeout(() => fetchAnalyses(), 3000);
-              }}
-              disabled={analyzing}
-              className="gap-2"
-            >
-              <Zap className={`h-4 w-4 ${analyzing ? 'animate-pulse' : ''}`} />
-              {analyzing ? 'Fetching & Analyzing...' : 'Fetch Latest & Analyze'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await analyzeConversations({ max: 5000, sinceLast: false });
-                setTimeout(() => fetchAnalyses(), 2000);
-              }}
-              disabled={analyzing}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${analyzing ? 'animate-spin' : ''}`} />
-              {analyzing ? 'Re-analyzing...' : 'Refresh (Re-analyze all)'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchAnalyses}
-              disabled={loading}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh List
-            </Button>
-          </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {/* Preview Authentication Notice */}
         {!user && window.location.pathname.includes('preview') && (
           <Alert className="mb-4">
@@ -184,6 +211,61 @@ export function DebugConversations() {
             </AlertDescription>
           </Alert>
         )}
+        
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Button 
+            onClick={handleFetchAndAnalyze}
+            disabled={analyzing}
+            variant="default"
+            size="sm"
+          >
+            {analyzing ? 'Processing...' : 'Fetch Latest & Analyze'}
+          </Button>
+          
+          <Button 
+            onClick={handleReanalyzeAll}
+            disabled={analyzing}
+            variant="secondary"
+            size="sm"
+          >
+            {analyzing ? 'Analyzing...' : 'Refresh (Re-analyze all)'}
+          </Button>
+          
+          <Button 
+            onClick={fetchAnalyses}
+            disabled={loading}
+            variant="outline"
+            size="sm"
+          >
+            {loading ? 'Loading...' : 'Refresh List'}
+          </Button>
+          
+          <Button 
+            onClick={() => setShowAttempts(!showAttempts)}
+            variant="outline"
+            size="sm"
+          >
+            {showAttempts ? 'Show Analyses' : 'Show All Attempts'}
+          </Button>
+        </div>
+        
+        <div className="bg-muted p-3 rounded-lg">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <span className="font-medium">Successful:</span> {analyses.length}
+            </div>
+            <div>
+              <span className="font-medium">Total Attempts:</span> {attempts.length}
+            </div>
+            <div>
+              <span className="font-medium">Failed:</span> {attempts.filter(a => a.status === 'failed').length}
+            </div>
+            <div>
+              <span className="font-medium">Rate Limited:</span> {attempts.filter(a => a.status === 'rate_limited').length}
+            </div>
+          </div>
+        </div>
+
         {error && (
           <div className="text-red-500 text-sm mb-4 p-3 bg-red-50 rounded-md">
             Error: {error}
@@ -198,29 +280,26 @@ export function DebugConversations() {
           </Alert>
         )}
 
-        {loading && !analyses.length && (
-          <div className="text-center py-8">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-            <p className="text-muted-foreground">Loading analyses...</p>
-          </div>
+        {loading && <p className="text-muted-foreground">Loading data...</p>}
+        
+        {!loading && !error && !showAttempts && analyses.length === 0 && (
+          <p className="text-muted-foreground">No successful analyses found. Click "Fetch Latest & Analyze" to process your conversations.</p>
         )}
-
-        {!loading && !error && analyses.length === 0 && (
-          <div className="text-center py-8">
-            <Brain className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-muted-foreground">No analyses found. Try running analysis first.</p>
-          </div>
+        
+        {!loading && !error && showAttempts && attempts.length === 0 && (
+          <p className="text-muted-foreground">No analysis attempts found.</p>
         )}
-
-        {analyses.length > 0 && (
-          <div className="space-y-4 max-h-96 overflow-y-auto">
+        
+        {!loading && !error && !showAttempts && analyses.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-medium text-lg">Successful Analyses ({analyses.length})</h3>
             {analyses.map((analysis) => (
               <div key={analysis.id} className="border rounded-lg p-4 space-y-3 bg-background/50">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-sm">
-                        {analysis.conversations?.subject || 'No Subject'}
+                        {analysis.conversation?.subject || 'No Subject'}
                       </h3>
                       <Badge 
                         variant={
@@ -235,25 +314,25 @@ export function DebugConversations() {
                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                        <Users className="h-3 w-3" />
                        <span>
-                         {analysis.conversations?.participants?.join(', ') || 'No participants'}
+                         {analysis.conversation?.participants?.join(', ') || 'No participants'}
                        </span>
                        <MessageSquare className="h-3 w-3 ml-2" />
-                       <span>{analysis.conversations?.message_count || 1} messages</span>
+                       <span>{analysis.conversation?.message_count || 1} messages</span>
                        <Badge 
                          variant="secondary" 
                          className="ml-2 text-xs"
                        >
-                         Group {getMessageGroup(analysis.conversations?.message_count || 1)}
+                         Group {getMessageGroup(analysis.conversation?.message_count || 1)}
                        </Badge>
                      </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
-                    <span>{format(new Date(analysis.conversations?.last_message_date || analysis.processed_at), 'MMM d, yyyy HH:mm')}</span>
-                    {analysis.conversations?.thread_id && (
+                    <span>{format(new Date(analysis.processed_at), 'MMM d, yyyy HH:mm')}</span>
+                    {analysis.conversation?.thread_id && (
                       <Button asChild variant="outline" size="sm" className="ml-2">
                         <a
-                          href={`https://mail.google.com/mail/u/0/?authuser=${encodeURIComponent(user?.email || '')}#inbox/${analysis.conversations.thread_id}`}
+                          href={`https://mail.google.com/mail/u/0/?authuser=${encodeURIComponent(user?.email || '')}#inbox/${analysis.conversation.thread_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="Open conversation in Gmail"
@@ -360,6 +439,59 @@ export function DebugConversations() {
                   </Badge>
                   <span>Conversation ID: {analysis.conversation_id.substring(0, 8)}...</span>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {!loading && !error && showAttempts && (
+          <div className="space-y-4">
+            <h3 className="font-medium text-lg">All Analysis Attempts ({attempts.length})</h3>
+            {attempts.map((attempt) => (
+              <div key={attempt.id} className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">
+                      {attempt.conversation?.subject || `Conversation ${attempt.conversation_id.slice(0, 8)}`}
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Participants: {attempt.conversation?.participants?.join(', ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={
+                      attempt.status === 'success' ? 'default' : 
+                      attempt.status === 'pending' ? 'secondary' :
+                      attempt.status === 'rate_limited' ? 'outline' : 'destructive'
+                    }>
+                      {attempt.status.toUpperCase()}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {attempt.conversation?.message_count || 0} msgs
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>Created: {new Date(attempt.created_at).toLocaleString()}</div>
+                  {attempt.completed_at && (
+                    <div>Completed: {new Date(attempt.completed_at).toLocaleString()}</div>
+                  )}
+                  {attempt.processing_time_ms && (
+                    <div>Processing Time: {attempt.processing_time_ms}ms</div>
+                  )}
+                  {attempt.claude_request_id && (
+                    <div>Claude Request ID: {attempt.claude_request_id}</div>
+                  )}
+                </div>
+                
+                {attempt.error_message && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded p-2">
+                    <p className="text-sm text-destructive">
+                      <strong>{attempt.error_code}:</strong> {attempt.error_message}
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

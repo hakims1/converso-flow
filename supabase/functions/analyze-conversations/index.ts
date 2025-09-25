@@ -74,6 +74,8 @@ Deno.serve(async (req) => {
       })
     }
 
+    const userId = user.id;
+
     const supabaseAuthed = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       global: {
         headers: { Authorization: authHeader },
@@ -194,7 +196,32 @@ if (cutoffDays) {
       model: model 
     });
 
-    for (const conv of toAnalyze) {
+    // Process conversations with improved rate limiting and tracking
+    const baseDelay = 1500; // 1.5 second delay to respect 50 req/min (60/50 = 1.2s minimum)
+    
+    for (let i = 0; i < toAnalyze.length; i++) {
+      const conversation = toAnalyze[i];
+      const conversationNumber = i + 1;
+      console.log(`Processing conversation ${conversation.id} (${conversationNumber}/${toAnalyze.length})`);
+      
+      // Create analysis attempt record
+      const attemptId = crypto.randomUUID();
+      const { error: attemptInsertError } = await supabase
+        .from('conversation_analysis_attempts')
+        .insert({
+          id: attemptId,
+          conversation_id: conversation.id,
+          user_id: userId,
+          attempt_number: 1,
+          status: 'pending'
+        });
+      
+      if (attemptInsertError) {
+        console.error(`Failed to create attempt record for ${conversation.id}:`, attemptInsertError);
+      }
+      
+      const startTime = Date.now();
+      
       try {
         // Decrypt email content for analysis
         let fullContent = '';
@@ -203,18 +230,18 @@ if (cutoffDays) {
             const { data: encryptedContent } = await supabase
               .from('email_contents')
               .select('encrypted_body, encryption_iv')
-              .eq('conversation_id', conv.id)
+              .eq('conversation_id', conversation.id)
               .single();
 
             if (encryptedContent) {
               fullContent = await decryptText(encryptedContent.encrypted_body, encryptedContent.encryption_iv, MASTER_ENCRYPTION_KEY);
             }
           } catch (decError) {
-            console.error(`Failed to decrypt content for conversation ${conv.id}:`, decError);
-            fullContent = conv.snippet || '';
+            console.error(`Failed to decrypt content for conversation ${conversation.id}:`, decError);
+            fullContent = conversation.snippet || '';
           }
         } else {
-          fullContent = conv.snippet || '';
+          fullContent = conversation.snippet || '';
         }
 
         // Detect if this is a single outgoing email from main user
@@ -237,7 +264,7 @@ if (cutoffDays) {
         }
         
         // Also check participants array for patterns where user appears as sender
-        const additionalUserEmails = conv.participants
+        const additionalUserEmails = conversation.participants
           ?.filter((p: string) => p.toLowerCase().includes('matt') && p.includes('@'))
           .map((p: string) => {
             const emailMatch = p.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
@@ -247,102 +274,202 @@ if (cutoffDays) {
         
         userEmails.push(...additionalUserEmails);
         
-        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, userEmails, conv.message_count || 1, conv.participants || []);
-        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}, userEmails=${JSON.stringify(userEmails)}, participants=${JSON.stringify(conv.participants)}`)
+        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, userEmails, conversation.message_count || 1, conversation.participants || []);
+        console.log(`Conversation ${conversation.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conversation.message_count}, userEmails=${JSON.stringify(userEmails)}, participants=${JSON.stringify(conversation.participants)}`)
 
-        const input = isSimpleOutreach 
-          ? buildSimplifiedPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), userEmails)
-          : buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
+        const prompt = isSimpleOutreach 
+          ? buildSimplifiedPrompt({ ...conversation, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), userEmails)
+          : buildPrompt({ ...conversation, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
 
-// Log token usage for debugging
-const estimatedTokens = Math.ceil(input.length / 4) // Rough estimate: 4 chars per token
-console.log(`Conversation ${conv.id}: prompt length=${input.length} chars, estimated=${estimatedTokens} tokens`)
+        // Log token usage for debugging
+        const estimatedTokens = Math.ceil(prompt.length / 4) // Rough estimate: 4 chars per token
+        console.log(`Conversation ${conversation.id}: prompt length=${prompt.length} chars, estimated=${estimatedTokens} tokens`)
 
-// Retry with exponential backoff for rate limits / transient errors
-let aiData: any = null
-let attempt = 0
-const startTime = Date.now()
-while (attempt < 3) {
-  attempt++
-  console.log(`Attempting Claude API call for conversation ${conv.id} (attempt ${attempt}/3)`)
-  
-  const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 300,
-      temperature: 0.1,
-      messages: [
-        { role: 'user', content: input },
-      ],
-    }),
-  })
-
-  if (aiResp.status === 429 || aiResp.status >= 500) {
-    const waitMs = 1000 * Math.pow(2, attempt - 1)
-    const txt = await aiResp.text()
-    console.error(`Anthropic error (attempt ${attempt}):`, aiResp.status, txt)
-    await new Promise((r) => setTimeout(r, waitMs))
-    continue
-  }
-
-  if (!aiResp.ok) {
-    const txt = await aiResp.text()
-    console.error(`Anthropic error for conversation ${conv.id} (attempt ${attempt}):`, aiResp.status, txt)
-    
-    // If this is the final attempt, record the failure and continue to next conversation
-    if (attempt >= 3) {
-      results.push({ conversation_id: conv.id, success: false, error_code: 'MODEL_ERROR', error_message: txt })
-      break
-    }
-    continue // Retry
-  }
-
-  aiData = await aiResp.json()
-  const responseTime = Date.now() - startTime
-  console.log(`Claude API response for conversation ${conv.id}: ${responseTime}ms, usage: ${JSON.stringify(aiData.usage || {})}`)
-  break
-}
-
-if (!aiData) {
-  continue
-}
-
-const text = aiData?.content?.[0]?.text || ''
-        const parsed = safeParseJSON(text)
-        if (!parsed) {
-          results.push({ conversation_id: conv.id, success: false, error_code: 'JSON_PARSE_ERROR', error_message: 'Model did not return valid JSON' })
-          continue
-        }
-
-        const row = mapToRow(conv.id, parsed)
-
-        const upsertRow = { ...row, processed_at: new Date().toISOString() }
-
-        const { error: upsertErr } = await supabaseAuthed
-          .from('conversation_analysis')
-          .upsert(upsertRow, { onConflict: 'conversation_id' })
-
-        if (upsertErr) {
-          console.error('Upsert error:', upsertErr)
-          results.push({ conversation_id: conv.id, success: false, error_code: 'DB_WRITE_ERROR', error_message: upsertErr.message })
-          continue
-        }
-
-        results.push({ conversation_id: conv.id, success: true })
-        processed += 1
-        console.log(`Successfully analyzed conversation ${conv.id} (${processed}/${toAnalyze.length})`)
+        let response: any;
+        let attempt = 1;
+        const maxRetries = 3;
+        let retryDelay = 3000; // Start with 3 second delay for rate limits
+        let claudeRequestId = '';
         
-        // Throttle to respect model token-per-minute limits (reduced for better UX)
-        await new Promise((r) => setTimeout(r, 300))
-      } catch (e: any) {
-        console.error('Unexpected analyze error:', e)
-        results.push({ conversation_id: conv.id, success: false, error_code: 'UNEXPECTED', error_message: e?.message || String(e) })
+        while (attempt <= maxRetries) {
+          try {
+            console.log(`Attempting Claude API call for conversation ${conversation.id} (attempt ${attempt}/${maxRetries})`);
+            
+            response = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+              },
+              body: JSON.stringify({
+                model: model || 'claude-3-5-sonnet-20241022',
+                max_tokens: 1000,
+                temperature: 0.1,
+                messages: [{ role: 'user', content: prompt }]
+              })
+            });
+
+            claudeRequestId = response.headers.get('request-id') || '';
+
+            if (response.status === 429) {
+              const errorText = await response.text();
+              console.log(`Rate limit hit for conversation ${conversation.id} (attempt ${attempt}): ${errorText}`);
+              
+              // Update attempt record with rate limit status
+              await supabase
+                .from('conversation_analysis_attempts')
+                .update({
+                  status: 'rate_limited',
+                  error_message: `Rate limit exceeded (attempt ${attempt}/${maxRetries})`,
+                  error_code: '429',
+                  claude_request_id: claudeRequestId
+                })
+                .eq('id', attemptId);
+              
+              if (attempt < maxRetries) {
+                console.log(`Waiting ${retryDelay}ms before retry...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                retryDelay *= 2; // Exponential backoff
+                attempt++;
+                continue;
+              } else {
+                throw new Error(`Rate limit exceeded after ${maxRetries} attempts`);
+              }
+            }
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`Anthropic error (attempt ${attempt}): ${response.status} ${errorText}`);
+              throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+            }
+
+            break; // Success, exit retry loop
+            
+          } catch (error: any) {
+            console.error(`Anthropic error (attempt ${attempt}): ${error.message}`);
+            if (attempt === maxRetries) {
+              throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            retryDelay *= 2;
+            attempt++;
+          }
+        }
+
+        const responseData = await response.json();
+        const processingTime = Date.now() - startTime;
+        console.log(`Claude API response for conversation ${conversation.id}: ${processingTime}ms, usage:`, JSON.stringify(responseData.usage));
+        
+        const analysisText = responseData.content[0].text;
+        const parsedData = safeParseJSON(analysisText);
+        
+        if (!parsedData) {
+          console.error(`Failed to parse JSON for conversation ${conversation.id}:`, analysisText);
+          
+          // Update attempt record with parse error
+          await supabase
+            .from('conversation_analysis_attempts')
+            .update({
+              status: 'failed',
+              error_message: 'Failed to parse AI response as JSON',
+              error_code: 'PARSE_ERROR',
+              processing_time_ms: processingTime,
+              completed_at: new Date().toISOString(),
+              claude_request_id: claudeRequestId
+            })
+            .eq('id', attemptId);
+          
+          results.push({
+            conversation_id: conversation.id,
+            success: false,
+            error_code: 'PARSE_ERROR',
+            error_message: 'Failed to parse AI response as JSON'
+          });
+          continue;
+        }
+
+        // Map parsed data to database row
+        const analysisRow = mapToRow(conversation.id, parsedData);
+        
+        // Upsert the analysis result
+        const { error: upsertError } = await supabase
+          .from('conversation_analysis')
+          .upsert(analysisRow, { 
+            onConflict: 'conversation_id',
+            ignoreDuplicates: false 
+          });
+
+        if (upsertError) {
+          console.error(`Failed to save analysis for conversation ${conversation.id}:`, upsertError);
+          
+          // Update attempt record with database error
+          await supabase
+            .from('conversation_analysis_attempts')
+            .update({
+              status: 'failed',
+              error_message: upsertError.message,
+              error_code: 'DATABASE_ERROR',
+              processing_time_ms: processingTime,
+              completed_at: new Date().toISOString(),
+              claude_request_id: claudeRequestId
+            })
+            .eq('id', attemptId);
+          
+          results.push({
+            conversation_id: conversation.id,
+            success: false,
+            error_code: 'DATABASE_ERROR',
+            error_message: upsertError.message
+          });
+        } else {
+          console.log(`Successfully analyzed conversation ${conversation.id} (${conversationNumber}/${toAnalyze.length})`);
+          
+          // Update attempt record with success
+          await supabase
+            .from('conversation_analysis_attempts')
+            .update({
+              status: 'success',
+              processing_time_ms: processingTime,
+              completed_at: new Date().toISOString(),
+              claude_request_id: claudeRequestId
+            })
+            .eq('id', attemptId);
+          
+          results.push({
+            conversation_id: conversation.id,
+            success: true
+          });
+          processed++;
+        }
+
+      } catch (error: any) {
+        console.error(`Error analyzing conversation ${conversation.id}:`, error);
+        const processingTime = Date.now() - startTime;
+        
+        // Update attempt record with error
+        await supabase
+          .from('conversation_analysis_attempts')
+          .update({
+            status: 'failed',
+            error_message: error.message,
+            error_code: 'ANALYSIS_ERROR',
+            processing_time_ms: processingTime,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', attemptId);
+        
+        results.push({
+          conversation_id: conversation.id,
+          success: false,
+          error_code: 'ANALYSIS_ERROR',
+          error_message: error.message
+        });
+      }
+      
+      // Add delay between conversations to respect rate limits
+      if (i < toAnalyze.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, baseDelay));
       }
     }
 
@@ -438,200 +565,154 @@ CRITICAL: You MUST carefully identify who sent the most recent message to determ
 STEP-BY-STEP PROCESS:
 1. IDENTIFY THE MOST RECENT MESSAGE: Look at the email conversation chronologically - the LAST message in the thread
 2. DETERMINE WHO SENT IT: Check if the sender is ${userName} (${userEmail}) or someone else
-3. SHOW YOUR REASONING: In your analysis, explain who sent the most recent message and why you chose the completion status
+3. ANALYZE THE CONTENT: What type of message was it?
+4. APPLY THE RULES BELOW:
 
-COMPLETION STATUS LOGIC:
+IF the most recent message was sent BY ${userName}:
+- If it was asking a question, requesting information, or expecting a response → "pending_response"
+- If it was sharing information without expecting a response → "complete"
+- If it was following up on something → "pending_response"
 
-1. "needs_followup" --> Most recent message is FROM ${userName} (${userEmail}) 
-   - ${userName} sent the last message and is waiting for a response
-   - UNLESS: ${userName} clearly concluded the conversation (thanks, confirmed, done, etc.)
+IF the most recent message was sent TO ${userName} (by someone else):
+- If it asks a question or requests something from ${userName} → "needs_response"
+- If it just shares information → "complete"
+- If it's a thank you or acknowledgment → "complete"
 
-2. "need_to_respond" --> Most recent message TO ${userName} (from someone else)  
-   - Someone else sent the last message and ${userName} should respond
-   - ESPECIALLY if there's a question, request, or call-to-action
-   - UNLESS: It's clearly just an FYI or pure acknowledgment
+Action Items Guidelines:
+Only include action items that ${userName} specifically needs to do based on the conversation. These should be:
+- Specific tasks mentioned in the emails
+- Follow-up actions ${userName} committed to
+- Questions ${userName} needs to answer
+- Information ${userName} needs to provide
 
-3. "complete" -->Either case with clear resolution 
+Key Contacts Guidelines:
+List the main people involved in this conversation (excluding ${userName}). Use their actual names or email addresses as they appear in the conversation.
 
-FALLBACK RULE: If you're uncertain about who sent the most recent message, default to "need_to_respond" to ensure important messages aren't missed.
+Summary Guidelines:
+Provide a concise summary of what the conversation is about from ${userName}'s perspective. Focus on the main topic and any outcomes or next steps.
 
-CONCLUSION INDICATORS:
-- "Thanks!", "Perfect!", "Sounds good!", "Confirmed", "Done", "Great!"
-- Statements where ${userName} commits to future action without asking for response
-- Clear project completion or deal closure statements
+Urgency Score Guidelines (1-10 scale):
+- 1-3: Low priority, general correspondence
+- 4-6: Medium priority, business-related but not time-sensitive  
+- 7-8: High priority, requires attention soon
+- 9-10: Urgent, immediate action required
 
-DEBUGGING REQUIREMENT: 
-In your analysis reasoning, briefly explain: "Most recent message from [sender name/email] shows [completion status] because [reason]"
+Suggested Response Guidelines:
+If the completion status suggests ${userName} needs to respond, provide a brief, professional suggested response or approach.
 
-Action Items Detection:
-- Only include specific, actionable tasks with clear ownership
-- Include deadlines if mentioned
-- Format: "Person to do X by Y date" or "Person to do X"
-- Exclude vague statements like "let's stay in touch"
-
-Urgency Scoring Criteria:
-- 9-10: Immediate deadlines, angry customers, urgent problems
-- 7-8: Time-sensitive opportunities, important decisions pending
-- 5-6: Standard follow-ups, routine business
-- 3-4: Informational, non-urgent requests
-- 1-2: General networking, casual conversations
-
-Key Contacts Rules:
-- Include people who: made decisions, have authority, mentioned budget/timeline, expressed strong interest
-- Exclude: CC'd people who didn't participate, automated senders
-
-Provide your analysis in exactly this JSON format:
-
-OUTPUT FORMAT:
+RETURN THIS EXACT JSON STRUCTURE:
 {
-  "category": "one of: product, sales/marketing, support, solicitations, partnership, other",
-  "topic": "specific subject in 2-5 words",
-  "sentiment": "one of: positive, neutral, negative, frustrated",
-  "completion_status": "one of: complete, need_to_respond, needs_followup",
-  "number_of_communications": ${msgCount},
-  "summary": "2-3 sentence overview focusing on key outcomes and next steps",
-  "action_items": ["specific task 1", "specific task 2"],
+  "topic": "Brief topic summary (6-8 words)",
+  "category": "product|sales/marketing|support|solicitations|partnership|other",
+  "sentiment": "positive|neutral|negative",
+  "completion_status": "complete|pending_response|needs_response",
+  "action_items": ["specific action for ${userName}", "another action"],
+  "key_contacts": ["Contact Name or email"],
   "urgency_score": 5,
-  "key_contacts": ["name1", "name2"],
-  "suggested_response": "brief suggested reply or null if no response needed",
-  "reasoning": "Most recent message from [sender] shows [completion_status] because [brief explanation]"
+  "summary": "Concise summary of the conversation",
+  "suggested_response": "Brief suggested response if needed"
 }`
 
   return `${systemInstructions}\n\n${analysisPrompt}`
 }
 
 function isSingleOutgoingEmail(fullContent: string, userEmails: string[], messageCount: number, participants: string[]): boolean {
-  // Must have exactly 1 message
-  if (messageCount !== 1) return false;
+  console.log(`Checking single outgoing email: messageCount=${messageCount}, userEmails=${JSON.stringify(userEmails)}`)
   
-  console.log(`Checking single outgoing email: messageCount=${messageCount}, userEmails=${JSON.stringify(userEmails)}`);
-  
-  // Check if user appears as sender in participants array
-  // In Gmail, participants array format: ["Sender Name <sender@email.com>", "recipient@email.com"]
-  // For outgoing emails, user should be first participant (sender)
-  if (participants && participants.length >= 1) {
-    const firstParticipant = participants[0];
-    console.log(`Checking first participant: ${firstParticipant}`);
-    
-    // Check if any of the user's emails appears in the first participant (sender)
-    for (const userEmail of userEmails) {
-      if (userEmail && firstParticipant.toLowerCase().includes(userEmail.toLowerCase())) {
-        console.log(`✓ User email ${userEmail} identified as sender (outgoing)`);
-        return true;
-      }
-    }
-    
-    console.log(`❌ None of user emails found as sender in: ${firstParticipant}`);
+  // Must be exactly 1 message
+  if (messageCount !== 1) {
+    return false
   }
   
-  // Fallback: Extract From header from email content
-  const fromHeaderMatch = fullContent.match(/From:\s*([^\n\r]+)/i);
-  if (fromHeaderMatch) {
-    const fromHeader = fromHeaderMatch[1];
-    console.log(`Checking From header: ${fromHeader}`);
+  // Must have participants
+  if (!participants || participants.length < 2) {
+    return false
+  }
+  
+  // Check if the first participant (usually the sender) matches any of the user's email addresses
+  for (const participant of participants) {
+    console.log(`Checking first participant: ${participant}`)
     
     for (const userEmail of userEmails) {
-      if (userEmail && fromHeader.toLowerCase().includes(userEmail.toLowerCase())) {
-        console.log(`✓ User email ${userEmail} found in From header (outgoing)`);
-        return true;
+      if (userEmail && participant.toLowerCase().includes(userEmail.toLowerCase())) {
+        console.log(`✓ User email ${userEmail} identified as sender (outgoing)`)
+        return true
       }
     }
   }
   
-  console.log(`❌ Could not identify any user email as sender`);
-  return false;
+  return false
 }
 
 function buildSimplifiedPrompt(conv: any, userName: string, userEmails: string[]): string {
   const rawContent = conv.full_content || conv.snippet || ''
-  const MAX_CONTENT_CHARS = 1500
+  const MAX_CONTENT_CHARS = 800
   const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
-  const msgCount = conv.message_count || 1
 
-  const systemInstructions = `You are analyzing a single outgoing email from ${userName}
+  return `Analyze this SINGLE OUTGOING EMAIL sent by ${userName}. This is an email ${userName} sent to someone else.
 
-ANALYSIS REQUIREMENTS:
-- This is a cold outreach email that has received no response yet
-- completion_status is automatically "needs_followup" 
-- Only analyze: category, topic, urgency_score
-- Keep analysis brief and focused
+EMAIL CONTENT: ${content}
 
-OUTPUT REQUIREMENTS:
-- Return ONLY valid JSON format
-- No additional explanations outside the JSON`
+Since this is an outgoing email from ${userName}, analyze it and return this JSON:
 
-  const analysisPrompt = `Analyze this single outgoing email and provide basic insights in JSON format:
-
-CONVERSATION: ${content}
-
-ANALYSIS INSTRUCTIONS:
-
-Category Guidelines:
-- sales/marketing - trying to make money, acquire users, promote services
-- partnership - building relationships for business gain  
-- product - about the product/service offered
-- other - anything else
-
-Topic Guidelines: Summarize the email subject in 2-5 words
-
-Urgency Scoring:
-- 7-8: Time-sensitive opportunities, important prospects
-- 5-6: Standard outreach, routine business  
-- 3-4: General networking, non-urgent outreach
-- 1-2: Casual, low-priority communications
-
-OUTPUT FORMAT:
 {
-  "category": "one of: sales/marketing, partnership, product, other",
-  "topic": "2-5 word summary",  
+  "topic": "Brief description of what ${userName} is reaching out about",
+  "category": "sales/marketing|partnership|support|product|other",
+  "sentiment": "positive|neutral|negative", 
+  "completion_status": "pending_response",
+  "action_items": ["Wait for recipient response"],
+  "key_contacts": ["recipient name/email"],
   "urgency_score": 5,
-  "completion_status": "needs_followup",
-  "number_of_communications": ${msgCount},
-  "summary": "Brief 1 sentence summary of outreach purpose",
-  "key_contacts": ["recipient name if identifiable"]
-}`
-
-  return `${systemInstructions}\n\n${analysisPrompt}`
+  "summary": "Brief summary of ${userName}'s outreach",
+  "suggested_response": "Follow up if no response in X days"
 }
 
-function safeParseJSON(text: string): any | null {
-  if (!text) return null
-  const match = text.match(/\{[\s\S]*\}/)
-  const candidate = match ? match[0] : text
+IMPORTANT: 
+- Since this is ${userName}'s outgoing email, completion_status should typically be "pending_response"
+- Focus on what ${userName} was trying to accomplish with this email
+- Return ONLY the JSON, no other text`
+}
+
+function safeParseJSON(text: string): any {
   try {
-    return JSON.parse(candidate)
+    return JSON.parse(text)
   } catch {
+    // Try to extract JSON from markdown code blocks
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[1])
+      } catch {
+        return null
+      }
+    }
+    
+    // Try to find JSON-like content
+    const jsonLikeMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonLikeMatch) {
+      try {
+        return JSON.parse(jsonLikeMatch[0])
+      } catch {
+        return null
+      }
+    }
+    
     return null
   }
 }
 
-function mapToRow(conversation_id: string, p: any) {
-  const toText = (v: any) => (typeof v === 'string' ? v : null)
-  const toInt = (v: any) => {
-    const n = Number(v)
-    return Number.isFinite(n) ? Math.round(n) : null
-  }
-  const toArray = (v: any) => (Array.isArray(v) ? v : null)
-
-  // Validate and constrain values to match database constraints
-  const validCategories = ['product', 'sales/marketing', 'support', 'solicitations', 'partnership', 'other']
-  const validSentiments = ['positive', 'neutral', 'negative', 'frustrated']
-  const validCompletionStatuses = ['complete', 'need_to_respond', 'needs_followup']
-
-  const category = toText(p.category)
-  const sentiment = toText(p.sentiment) 
-  const completion_status = toText(p.completion_status)
-
+function mapToRow(conversationId: string, parsed: any): any {
   return {
-    conversation_id,
-    sentiment: validSentiments.includes(sentiment || '') ? (sentiment || 'neutral') : 'neutral',
-    category: validCategories.includes(category || '') ? (category || 'other') : 'other',
-    topic: toText(p.topic) || null,
-    summary: toText(p.summary) || null,
-    completion_status: validCompletionStatuses.includes(completion_status || '') ? (completion_status || 'needs_followup') : 'needs_followup',
-    action_items: Array.isArray(p.action_items) ? p.action_items : [],
-    key_contacts: toArray(p.key_contacts) || [],
-    urgency_score: Math.min(10, Math.max(1, toInt(p.urgency_score) ?? 5)),
-    suggested_response: toText(p.suggested_response) || null,
+    conversation_id: conversationId,
+    topic: parsed.topic || null,
+    category: parsed.category || 'other',
+    sentiment: parsed.sentiment || 'neutral',
+    completion_status: parsed.completion_status || 'complete',
+    action_items: parsed.action_items || [],
+    key_contacts: parsed.key_contacts || [],
+    urgency_score: typeof parsed.urgency_score === 'number' ? parsed.urgency_score : null,
+    summary: parsed.summary || null,
+    suggested_response: parsed.suggested_response || null,
+    processed_at: new Date().toISOString()
   }
 }

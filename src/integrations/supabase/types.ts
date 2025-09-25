@@ -100,6 +100,48 @@ export type Database = {
           },
         ]
       }
+      conversation_analysis_attempts: {
+        Row: {
+          attempt_number: number
+          claude_request_id: string | null
+          completed_at: string | null
+          conversation_id: string
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          processing_time_ms: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          attempt_number?: number
+          claude_request_id?: string | null
+          completed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          processing_time_ms?: number | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          attempt_number?: number
+          claude_request_id?: string | null
+          completed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          processing_time_ms?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string
