@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Settings as SettingsIcon, Mail, Bell, Shield, CreditCard, User, Trash2 } from "lucide-react";
 import { SecuritySettings } from './SecuritySettings';
+import DataCleanup from './DataCleanup';
 
 export function DashboardSettings() {
   return (
@@ -232,6 +233,9 @@ export function DashboardSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Data Security Cleanup */}
+      <DataCleanup />
 
       <SecuritySettings />
     </div>

@@ -218,13 +218,21 @@ if (cutoffDays) {
         }
 
         // Detect if this is a single outgoing email from main user
-        // Get all user email addresses (Gmail sync email + business emails)
-        const userEmails = [user.email || ''].filter(Boolean);
+        // SECURITY FIX: Get Gmail account email to properly identify user's emails
+        const { data: tokenData } = await supabase
+          .from('gmail_tokens')
+          .select('gmail_account_email')
+          .eq('user_id', user.id)
+          .single();
+        
+        const gmailAccountEmail = tokenData?.gmail_account_email?.toLowerCase() || '';
+        
+        // Get all user email addresses (Gmail account + profile emails)
+        const userEmails = [gmailAccountEmail, user.email || ''].filter(Boolean);
         
         // For Matt Hakimi specifically, add known business email patterns
         // This logic can be expanded for other users as needed
-        const primaryEmail = user.email || '';
-        if (primaryEmail.includes('matt.hakims@gmail.com')) {
+        if (gmailAccountEmail.includes('matt.hakims@gmail.com')) {
           userEmails.push('matt@peachscore.com'); // Known business email
         }
         

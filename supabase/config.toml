@@ -80,3 +80,9 @@ verify_jwt = true
 
 [functions.email-purge]
 verify_jwt = false
+
+[functions.fetch-contact-avatars]
+verify_jwt = true
+
+[functions.data-cleanup]
+verify_jwt = true

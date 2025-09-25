@@ -101,6 +101,44 @@ serve(async (req) => {
       encryptedAccessToken = await encryptTextWithIV(access_token, encryptionKey, sharedIV);
     }
 
+    // Get Gmail account email to check for existing connections
+    let gmailAccountEmail: string = '';
+    try {
+      const profileResponse = await fetch('https://www.googleapis.com/gmail/v1/users/me/profile', {
+        headers: {
+          'Authorization': `Bearer ${access_token}`,
+        },
+      });
+
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        gmailAccountEmail = profileData.emailAddress?.toLowerCase() || '';
+        
+        // SECURITY CHECK: Ensure this Gmail account isn't already connected to another user
+        const { data: existingConnection } = await supabase
+          .from('gmail_tokens')
+          .select('user_id')
+          .eq('gmail_account_email', gmailAccountEmail)
+          .neq('user_id', user.id)
+          .single();
+
+        if (existingConnection) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'GMAIL_ACCOUNT_ALREADY_CONNECTED',
+              message: `Gmail account ${gmailAccountEmail} is already connected to another user account` 
+            }),
+            { 
+              status: 409, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+      }
+    } catch (profileError) {
+      console.error('Failed to get Gmail profile:', profileError);
+    }
+
     // Store tokens in database with conflict resolution
     const { error: upsertError } = await supabase
       .from('gmail_tokens')
@@ -109,7 +147,8 @@ serve(async (req) => {
         encrypted_access_token: encryptedAccessToken?.encrypted || null,
         encrypted_refresh_token: encryptedRefreshToken.encrypted,
         token_expires_at: expires_at ? new Date(expires_at * 1000).toISOString() : null,
-        encryption_iv: sharedIVBase64 // Shared IV for both tokens
+        encryption_iv: sharedIVBase64, // Shared IV for both tokens
+        gmail_account_email: gmailAccountEmail
       }, {
         onConflict: 'user_id'
       });

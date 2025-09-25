@@ -293,7 +293,8 @@ Deno.serve(async (req) => {
     const maxThreads = typeof _b.max_threads === 'number' ? Math.max(1, Math.min(1000, _b.max_threads)) : 100;
     const silent = typeof _b.silent === 'boolean' ? _b.silent : false;
 
-    // Test Gmail API access
+    // Test Gmail API access and get the actual Gmail account email
+    let gmailAccountEmail: string;
     try {
       const profileResponse = await fetch('https://www.googleapis.com/gmail/v1/users/me/profile', {
         headers: {
@@ -306,13 +307,33 @@ Deno.serve(async (req) => {
       }
 
       const profileData = await profileResponse.json();
-      console.log('Gmail access confirmed for:', profileData.emailAddress);
+      gmailAccountEmail = profileData.emailAddress?.toLowerCase() || '';
+      console.log('Gmail access confirmed for:', gmailAccountEmail);
+
+      // SECURITY: Update the gmail_tokens table with the actual Gmail account email
+      // This prevents multiple users from connecting to the same Gmail account
+      try {
+        await supabase
+          .from('gmail_tokens')
+          .update({ gmail_account_email: gmailAccountEmail })
+          .eq('user_id', user.id);
+      } catch (dbError) {
+        console.error('Failed to update Gmail account email:', dbError);
+        // This might fail if another user already has this Gmail account
+        return new Response(
+          JSON.stringify({ 
+            error: 'GMAIL_ACCOUNT_ALREADY_CONNECTED', 
+            message: `Gmail account ${gmailAccountEmail} is already connected to another user account` 
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       if (testOnly) {
         return new Response(
           JSON.stringify({ 
             success: true, 
-            email: profileData.emailAddress 
+            email: gmailAccountEmail 
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -380,7 +401,9 @@ Deno.serve(async (req) => {
 
     const processedConversations = [];
     let processedCount = 0;
-    const userEmail = user.email?.toLowerCase() || '';
+    // SECURITY FIX: Use the actual Gmail account email for participation detection
+    // instead of the user's profile email to prevent cross-account data leakage
+    const userEmail = gmailAccountEmail;
 
     // Process each thread
     for (const thread of threads) {

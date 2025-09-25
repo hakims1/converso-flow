@@ -219,6 +219,7 @@ export type Database = {
           encrypted_access_token: string | null
           encrypted_refresh_token: string
           encryption_iv: string
+          gmail_account_email: string | null
           id: string
           token_expires_at: string | null
           updated_at: string
@@ -229,6 +230,7 @@ export type Database = {
           encrypted_access_token?: string | null
           encrypted_refresh_token: string
           encryption_iv: string
+          gmail_account_email?: string | null
           id?: string
           token_expires_at?: string | null
           updated_at?: string
@@ -239,6 +241,7 @@ export type Database = {
           encrypted_access_token?: string | null
           encrypted_refresh_token?: string
           encryption_iv?: string
+          gmail_account_email?: string | null
           id?: string
           token_expires_at?: string | null
           updated_at?: string
@@ -326,7 +329,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_gmail_account_email: {
+        Args: { user_token: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
