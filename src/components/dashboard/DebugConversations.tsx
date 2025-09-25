@@ -18,7 +18,7 @@ interface ConversationAnalysis {
   topic: string | null;
   summary: string | null;
   completion_status: string;
-  action_items: string[];
+  action_items: any; // Can be Json from database
   key_contacts: string[];
   urgency_score: number | null;
   suggested_response: string | null;
@@ -29,27 +29,28 @@ interface ConversationAnalysis {
     message_count: number;
     thread_id: string;
     last_message_date: string;
-  };
+  } | null;
 }
 
 interface AnalysisAttempt {
   id: string;
   conversation_id: string;
   attempt_number: number;
-  status: 'pending' | 'success' | 'failed' | 'rate_limited';
-  error_message?: string;
-  error_code?: string;
-  claude_request_id?: string;
-  processing_time_ms?: number;
+  status: string; // Will be cast to proper type
+  error_message?: string | null;
+  error_code?: string | null;
+  claude_request_id?: string | null;
+  processing_time_ms?: number | null;
   created_at: string;
-  completed_at?: string;
+  completed_at?: string | null;
+  user_id: string;
   conversation?: {
     subject: string;
     participants: string[];
     message_count: number;
     thread_id: string;
     last_message_date: string;
-  };
+  } | null;
 }
 
 export function DebugConversations() {
@@ -128,10 +129,10 @@ export function DebugConversations() {
         throw attemptsError;
       }
       
-      // Sort by message count (descending), then urgency, then date
+      // Sort analyses and set state (cast to proper types)
       const sorted = sortConversationsByPriority(analysisData || []);
       setAnalyses(sorted);
-      setAttempts(attemptsData || []);
+      setAttempts((attemptsData || []) as unknown as AnalysisAttempt[]);
     } catch (err) {
       console.error('Error fetching analyses:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch analyses');
@@ -398,11 +399,11 @@ export function DebugConversations() {
                     </div>
                   )}
 
-                  {analysis.action_items && analysis.action_items.length > 0 && (
+                  {analysis.action_items && Array.isArray(analysis.action_items) && analysis.action_items.length > 0 && (
                     <div className="text-xs">
                       <span className="font-medium text-muted-foreground">Action Items:</span>
                       <ul className="mt-1 space-y-1">
-                        {analysis.action_items.map((item, index) => (
+                        {(analysis.action_items as string[]).map((item, index) => (
                           <li key={index} className="text-foreground/80 flex items-start gap-1">
                             <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
                             {item}
