@@ -218,11 +218,32 @@ if (cutoffDays) {
         }
 
         // Detect if this is a single outgoing email from main user
-        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, user.email || '', conv.message_count || 1, conv.participants || []);
-        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}, participants=${JSON.stringify(conv.participants)}`)
+        // Get all user email addresses (Gmail sync email + business emails)
+        const userEmails = [user.email || ''].filter(Boolean);
+        
+        // For Matt Hakimi specifically, add known business email patterns
+        // This logic can be expanded for other users as needed
+        const primaryEmail = user.email || '';
+        if (primaryEmail.includes('matt.hakims@gmail.com')) {
+          userEmails.push('matt@peachscore.com'); // Known business email
+        }
+        
+        // Also check participants array for patterns where user appears as sender
+        const additionalUserEmails = conv.participants
+          ?.filter((p: string) => p.toLowerCase().includes('matt') && p.includes('@'))
+          .map((p: string) => {
+            const emailMatch = p.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+            return emailMatch ? emailMatch[1] : null;
+          })
+          .filter(Boolean) || [];
+        
+        userEmails.push(...additionalUserEmails);
+        
+        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, userEmails, conv.message_count || 1, conv.participants || []);
+        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}, userEmails=${JSON.stringify(userEmails)}, participants=${JSON.stringify(conv.participants)}`)
 
         const input = isSimpleOutreach 
-          ? buildSimplifiedPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
+          ? buildSimplifiedPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), userEmails)
           : buildPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
 
 // Log token usage for debugging
@@ -471,49 +492,49 @@ OUTPUT FORMAT:
   return `${systemInstructions}\n\n${analysisPrompt}`
 }
 
-function isSingleOutgoingEmail(fullContent: string, userEmail: string, messageCount: number, participants: string[]): boolean {
+function isSingleOutgoingEmail(fullContent: string, userEmails: string[], messageCount: number, participants: string[]): boolean {
   // Must have exactly 1 message
   if (messageCount !== 1) return false;
+  
+  console.log(`Checking single outgoing email: messageCount=${messageCount}, userEmails=${JSON.stringify(userEmails)}`);
   
   // Check if user appears as sender in participants array
   // In Gmail, participants array format: ["Sender Name <sender@email.com>", "recipient@email.com"]
   // For outgoing emails, user should be first participant (sender)
-  if (participants && participants.length >= 2) {
+  if (participants && participants.length >= 1) {
     const firstParticipant = participants[0];
-    const lastParticipant = participants[participants.length - 1];
-    console.log(`Checking participants - First: ${firstParticipant}, Last: ${lastParticipant}`);
+    console.log(`Checking first participant: ${firstParticipant}`);
     
-    // Check if user's email appears in the first participant (sender) 
-    // AND is NOT in recipient format (no angle brackets around their email)
-    const userInFirst = firstParticipant.toLowerCase().includes(userEmail.toLowerCase());
-    const userInLast = lastParticipant.toLowerCase().includes(userEmail.toLowerCase());
-    
-    // For outgoing: user should be sender (first) and NOT recipient (last)
-    if (userInFirst && !userInLast) {
-      console.log(`✓ User ${userEmail} identified as sender (outgoing)`);
-      return true;
+    // Check if any of the user's emails appears in the first participant (sender)
+    for (const userEmail of userEmails) {
+      if (userEmail && firstParticipant.toLowerCase().includes(userEmail.toLowerCase())) {
+        console.log(`✓ User email ${userEmail} identified as sender (outgoing)`);
+        return true;
+      }
     }
     
-    // For incoming: user would be recipient (last) and NOT sender (first)
-    if (!userInFirst && userInLast) {
-      console.log(`❌ User ${userEmail} is recipient (incoming)`);
-      return false;
-    }
+    console.log(`❌ None of user emails found as sender in: ${firstParticipant}`);
   }
   
   // Fallback: Extract From header from email content
   const fromHeaderMatch = fullContent.match(/From:\s*([^\n\r]+)/i);
   if (fromHeaderMatch) {
     const fromHeader = fromHeaderMatch[1];
-    console.log(`Checking From header: ${fromHeader} for ${userEmail}`);
-    return fromHeader.toLowerCase().includes(userEmail.toLowerCase());
+    console.log(`Checking From header: ${fromHeader}`);
+    
+    for (const userEmail of userEmails) {
+      if (userEmail && fromHeader.toLowerCase().includes(userEmail.toLowerCase())) {
+        console.log(`✓ User email ${userEmail} found in From header (outgoing)`);
+        return true;
+      }
+    }
   }
   
-  console.log(`❌ Could not identify ${userEmail} as sender`);
+  console.log(`❌ Could not identify any user email as sender`);
   return false;
 }
 
-function buildSimplifiedPrompt(conv: any, userName: string, userEmail: string): string {
+function buildSimplifiedPrompt(conv: any, userName: string, userEmails: string[]): string {
   const rawContent = conv.full_content || conv.snippet || ''
   const MAX_CONTENT_CHARS = 1500
   const content = rawContent.length > MAX_CONTENT_CHARS ? `${rawContent.slice(0, MAX_CONTENT_CHARS)}\n[TRUNCATED]` : rawContent
