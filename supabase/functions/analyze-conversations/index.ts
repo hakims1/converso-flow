@@ -218,8 +218,8 @@ if (cutoffDays) {
         }
 
         // Detect if this is a single outgoing email from main user
-        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, user.email || '', conv.message_count || 1);
-        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}`)
+        const isSimpleOutreach = isSingleOutgoingEmail(fullContent, user.email || '', conv.message_count || 1, conv.participants || []);
+        console.log(`Conversation ${conv.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conv.message_count}, participants=${JSON.stringify(conv.participants)}`)
 
         const input = isSimpleOutreach 
           ? buildSimplifiedPrompt({ ...conv, full_content: fullContent }, user.user_metadata?.full_name || user.user_metadata?.name || (user.email?.split('@')[0] ?? 'User'), user.email || '')
@@ -471,18 +471,46 @@ OUTPUT FORMAT:
   return `${systemInstructions}\n\n${analysisPrompt}`
 }
 
-function isSingleOutgoingEmail(fullContent: string, userEmail: string, messageCount: number): boolean {
+function isSingleOutgoingEmail(fullContent: string, userEmail: string, messageCount: number, participants: string[]): boolean {
   // Must have exactly 1 message
   if (messageCount !== 1) return false;
   
-  // Extract From header from email content
+  // Check if user appears as sender in participants array
+  // In Gmail, participants array format: ["Sender Name <sender@email.com>", "recipient@email.com"]
+  // For outgoing emails, user should be first participant (sender)
+  if (participants && participants.length >= 2) {
+    const firstParticipant = participants[0];
+    const lastParticipant = participants[participants.length - 1];
+    console.log(`Checking participants - First: ${firstParticipant}, Last: ${lastParticipant}`);
+    
+    // Check if user's email appears in the first participant (sender) 
+    // AND is NOT in recipient format (no angle brackets around their email)
+    const userInFirst = firstParticipant.toLowerCase().includes(userEmail.toLowerCase());
+    const userInLast = lastParticipant.toLowerCase().includes(userEmail.toLowerCase());
+    
+    // For outgoing: user should be sender (first) and NOT recipient (last)
+    if (userInFirst && !userInLast) {
+      console.log(`✓ User ${userEmail} identified as sender (outgoing)`);
+      return true;
+    }
+    
+    // For incoming: user would be recipient (last) and NOT sender (first)
+    if (!userInFirst && userInLast) {
+      console.log(`❌ User ${userEmail} is recipient (incoming)`);
+      return false;
+    }
+  }
+  
+  // Fallback: Extract From header from email content
   const fromHeaderMatch = fullContent.match(/From:\s*([^\n\r]+)/i);
-  if (!fromHeaderMatch) return false;
+  if (fromHeaderMatch) {
+    const fromHeader = fromHeaderMatch[1];
+    console.log(`Checking From header: ${fromHeader} for ${userEmail}`);
+    return fromHeader.toLowerCase().includes(userEmail.toLowerCase());
+  }
   
-  const fromHeader = fromHeaderMatch[1];
-  
-  // Must be sent FROM the main user
-  return fromHeader.includes(userEmail);
+  console.log(`❌ Could not identify ${userEmail} as sender`);
+  return false;
 }
 
 function buildSimplifiedPrompt(conv: any, userName: string, userEmail: string): string {
@@ -567,11 +595,11 @@ function mapToRow(conversation_id: string, p: any) {
 
   return {
     conversation_id,
-    sentiment: validSentiments.includes(sentiment) ? sentiment : 'neutral',
-    category: validCategories.includes(category) ? category : 'other',
+    sentiment: validSentiments.includes(sentiment || '') ? (sentiment || 'neutral') : 'neutral',
+    category: validCategories.includes(category || '') ? (category || 'other') : 'other',
     topic: toText(p.topic) || null,
     summary: toText(p.summary) || null,
-    completion_status: validCompletionStatuses.includes(completion_status) ? completion_status : 'needs_followup',
+    completion_status: validCompletionStatuses.includes(completion_status || '') ? (completion_status || 'needs_followup') : 'needs_followup',
     action_items: Array.isArray(p.action_items) ? p.action_items : [],
     key_contacts: toArray(p.key_contacts) || [],
     urgency_score: Math.min(10, Math.max(1, toInt(p.urgency_score) ?? 5)),
