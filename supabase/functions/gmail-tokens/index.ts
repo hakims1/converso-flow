@@ -139,7 +139,7 @@ serve(async (req) => {
       console.error('Failed to get Gmail profile:', profileError);
     }
 
-    // Store tokens in database with conflict resolution
+    // Store tokens in database (service role bypasses RLS)
     const { error: upsertError } = await supabase
       .from('gmail_tokens')
       .upsert({
