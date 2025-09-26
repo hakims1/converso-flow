@@ -31,7 +31,7 @@ export const useGmail = () => {
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const syncGmail = async (opts?: { sinceDays?: number; maxThreads?: number; fullHistory?: boolean; silent?: boolean }) => {
+  const syncGmail = async (opts?: { sinceDays?: number; maxThreads?: number; fullHistory?: boolean; silent?: boolean; incremental?: boolean }) => {
     if (!session) {
       toast({
         title: 'Authentication Required',
@@ -48,8 +48,8 @@ export const useGmail = () => {
       opts
     });
 
-    const sinceDays = opts?.sinceDays ?? 180;
-    const maxThreads = opts?.maxThreads ?? 100;
+    const sinceDays = opts?.sinceDays ?? (opts?.incremental ? 7 : 180); // Incremental: 7 days, Full: 6 months
+    const maxThreads = opts?.maxThreads ?? (opts?.incremental ? 50 : 100);
     const fullHistory = opts?.fullHistory ?? false;
 
     setLoading(true);
@@ -86,8 +86,8 @@ export const useGmail = () => {
         
         if (!opts?.silent) {
           toast({
-            title: 'Gmail Synced',
-            description: `Successfully loaded ${response.messages.length} recent emails.`,
+            title: opts?.incremental ? 'Latest Emails Synced' : 'Gmail Synced',
+            description: `Successfully loaded ${response.messages.length} ${opts?.incremental ? 'new ' : ''}emails.`,
           });
         }
       } else {
@@ -111,11 +111,17 @@ export const useGmail = () => {
     }
   };
 
+  // Incremental sync - only gets new emails since last sync
+  const syncLatestEmails = async () => {
+    await syncGmail({ incremental: true, silent: false });
+  };
+
   return {
     messages,
     loading,
     totalCount,
     needsReauth,
-    syncGmail
+    syncGmail,
+    syncLatestEmails
   };
 };

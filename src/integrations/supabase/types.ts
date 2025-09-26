@@ -302,6 +302,7 @@ export type Database = {
           full_name: string | null
           id: string
           last_name: string | null
+          last_sync_timestamp: string | null
           updated_at: string
           user_id: string
         }
@@ -315,6 +316,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_name?: string | null
+          last_sync_timestamp?: string | null
           updated_at?: string
           user_id: string
         }
@@ -328,6 +330,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_name?: string | null
+          last_sync_timestamp?: string | null
           updated_at?: string
           user_id?: string
         }

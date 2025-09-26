@@ -17,35 +17,75 @@ export function Conversations() {
   const { conversations, loading, error, refetch } = useConversations();
   const { session } = useAuth();
   const { toast } = useToast();
-  const handleFetchAndAnalyze = async () => {
-    console.log('Starting fetch and analysis workflow...');
-    
-    // First fetch latest emails from Gmail
-    const gmailResponse = await supabase.functions.invoke('gmail-sync', {
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-      body: { 
-        access_token: session?.provider_token,
-        since_days: 7, // Fetch emails from last 7 days
-        max_threads: 100
-      }
-    });
-    
-    if (gmailResponse.error) {
+  const handleAnalyzeLatest = async () => {
+    try {
       toast({
-        title: 'Gmail sync failed',
-        description: gmailResponse.error.message || 'Failed to fetch latest emails',
-        variant: 'destructive',
+        title: "Analyzing latest emails...",
+        description: "Syncing new emails and analyzing conversations."
       });
-      return;
+      
+      // Sync latest emails (incremental)
+      const gmailResponse = await supabase.functions.invoke('gmail-sync', {
+        body: { 
+          since_days: 7, // Last week only
+          max_threads: 50,
+          incremental: true
+        }
+      });
+      
+      if (gmailResponse.error) {
+        throw new Error(gmailResponse.error.message || 'Failed to sync latest emails');
+      }
+      
+      // Analyze only new/updated conversations
+      await analysis.analyzeConversations({
+        max: 50,
+        sinceLast: true, // Only analyze since last analysis
+        onProgress: (processed, total) => {
+          console.log(`Analysis progress: ${processed}/${total}`);
+        }
+      });
+      
+      // Refresh conversations to show updated data
+      refetch();
+      
+    } catch (error) {
+      console.error('Failed to analyze latest:', error);
+      toast({
+        title: "Error",
+        description: "Failed to analyze latest emails. Please try again.",
+        variant: "destructive"
+      });
     }
-    
-    console.log('Gmail sync complete, starting analysis...');
-    
-    // Refresh conversations list to show new ones
-    await refetch();
-    
-    // Then analyze conversations (focusing on recent ones)
-    await analysis.analyzeConversations({ max: 75, sinceLast: true });
+  };
+
+  const handleFullRefresh = async () => {
+    try {
+      toast({
+        title: "Full refresh started...",
+        description: "Re-analyzing all conversations. This may take a while."
+      });
+      
+      // Full re-analysis of all conversations
+      await analysis.analyzeConversations({
+        max: 200,
+        sinceLast: false, // Analyze all conversations
+        onProgress: (processed, total) => {
+          console.log(`Analysis progress: ${processed}/${total}`);
+        }
+      });
+      
+      // Refresh conversations to show updated data
+      refetch();
+      
+    } catch (error) {
+      console.error('Failed to refresh all:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh all conversations. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
   return (
     <div className="space-y-6">
@@ -58,26 +98,26 @@ export function Conversations() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button className="gradient-primary text-white border-0" onClick={handleFetchAndAnalyze} disabled={analysis.loading}>
+          <Button className="gradient-primary text-white border-0" onClick={handleAnalyzeLatest} disabled={analysis.loading}>
             {analysis.loading ? (
               <>
                 <Zap className="mr-2 h-4 w-4 animate-pulse" />
-                Fetching & Analyzing...
+                Analyzing...
               </>
             ) : (
               <>
                 <Zap className="mr-2 h-4 w-4" />
-                Fetch Latest & Analyze
+                Analyze Latest Emails
               </>
             )}
           </Button>
           <Button 
             variant="outline" 
-            onClick={() => analysis.analyzeConversations({ max: 5000, sinceLast: false })}
+            onClick={handleFullRefresh}
             disabled={analysis.loading}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh (Re-analyze all)
+            Full Refresh
           </Button>
         </div>
       </div>
