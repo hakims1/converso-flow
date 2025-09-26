@@ -163,42 +163,7 @@ serve(async (req) => {
 
     console.log('Gmail tokens stored successfully for user:', user.id);
 
-    // Trigger initial email sync for first-time users
-    console.log('Starting initial email sync for new user...');
-    
-    try {
-      // Call gmail-sync function to perform initial sync
-      const syncResponse = await fetch(`${supabaseUrl}/functions/v1/gmail-sync`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-          'apikey': supabaseKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          full_history: false,
-          since_days: 180, // Initial sync gets last 6 months
-          max_threads: 200  // More generous for first sync
-        })
-      });
-
-      const syncData = await syncResponse.json();
-      
-      if (syncData.success) {
-        console.log('Initial email sync completed:', syncData.totalCount, 'conversations');
-        
-        // Update user's last sync timestamp
-        await supabase
-          .from('profiles')
-          .update({ last_sync_timestamp: new Date().toISOString() })
-          .eq('user_id', user.id);
-      } else {
-        console.error('Initial sync failed:', syncData.error);
-      }
-    } catch (syncError) {
-      console.error('Failed to trigger initial sync:', syncError);
-      // Don't fail the auth flow if sync fails - user can manually sync later
-    }
+    // Authentication complete - user can now manually sync emails when ready
 
     return new Response(
       JSON.stringify({ success: true }),

@@ -53,10 +53,13 @@ const Auth = () => {
             console.log('Gmail tokens stored successfully', data);
             setTokenStorageComplete(true);
             
-            // Wait a moment for tokens to be fully stored, then check Gmail access
+            // Tokens stored successfully - redirect immediately
+            setTokenStorageComplete(true);
+            
+            // Brief delay to ensure token storage is complete, then redirect
             setTimeout(() => {
-              checkGmailAccess();
-            }, 1000);
+              navigate('/analyze');
+            }, 500);
           }
         } catch (error) {
           console.error('Error storing Gmail tokens:', error);
@@ -77,13 +80,13 @@ const Auth = () => {
     handleTokenStorage();
   }, [session, user, tokenStorageComplete, isStoringTokens, checkGmailAccess]);
 
-  // Redirect to analyze page when everything is ready
+  // Redirect immediately after token storage is complete
   useEffect(() => {
-    if (user && hasGmailAccess) {
-      console.log('User authenticated with Gmail access, redirecting...');
+    if (tokenStorageComplete) {
+      console.log('Token storage complete, redirecting to analyze...');
       navigate('/analyze');
     }
-  }, [user, hasGmailAccess, navigate]);
+  }, [tokenStorageComplete, navigate]);
   const handleSignIn = async () => {
     try {
       await signInWithGoogle();

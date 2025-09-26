@@ -98,7 +98,11 @@ export function Conversations() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button className="gradient-primary text-white border-0" onClick={handleAnalyzeLatest} disabled={analysis.loading}>
+          <Button 
+            className="gradient-primary text-white border-0" 
+            onClick={handleAnalyzeLatest} 
+            disabled={analysis.loading}
+          >
             {analysis.loading ? (
               <>
                 <Zap className="mr-2 h-4 w-4 animate-pulse" />
@@ -107,18 +111,21 @@ export function Conversations() {
             ) : (
               <>
                 <Zap className="mr-2 h-4 w-4" />
-                Analyze Latest Emails
+                {conversations.length === 0 ? 'Get My Emails' : 'Analyze Latest Emails'}
               </>
             )}
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleFullRefresh}
-            disabled={analysis.loading}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Full Refresh
-          </Button>
+          
+          {conversations.length > 0 && (
+            <Button 
+              variant="outline" 
+              onClick={handleFullRefresh}
+              disabled={analysis.loading}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Full Refresh (6 months)
+            </Button>
+          )}
         </div>
       </div>
 
@@ -206,15 +213,11 @@ export function Conversations() {
           ) : conversations.length === 0 ? (
             <div className="text-center py-12">
               <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Conversations Yet</h3>
+              <h3 className="text-lg font-semibold mb-2">Ready to analyze your emails!</h3>
               <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                Connect your Gmail account to see your conversations here. 
-                We'll analyze your recent emails and provide AI-powered insights.
+                Click "Get My Emails" above to start analyzing your conversations and discover insights.
+                We'll fetch your recent emails (last 7 days) to get you started quickly.
               </p>
-              <Button className="gradient-primary text-white border-0">
-                <Mail className="mr-2 h-4 w-4" />
-                Connect Gmail Account
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
