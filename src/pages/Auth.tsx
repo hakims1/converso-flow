@@ -38,8 +38,12 @@ const Auth = () => {
         setIsStoringTokens(true);
         
         try {
-          // Store the tokens securely
-          const { data, error } = await supabase.functions.invoke('gmail-tokens', {
+          // Store the tokens securely with timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Token storage timeout')), 30000)
+          );
+          
+          const storagePromise = supabase.functions.invoke('gmail-tokens', {
             body: {
               access_token: session.provider_token,
               refresh_token: session.provider_refresh_token,
@@ -47,44 +51,43 @@ const Auth = () => {
             }
           });
           
+          const { data, error } = await Promise.race([storagePromise, timeoutPromise]) as any;
+          
           if (error) {
             console.error('Failed to store Gmail tokens:', error);
-          } else {
-            console.log('Gmail tokens stored successfully', data);
-            setTokenStorageComplete(true);
-            
-            // Tokens stored successfully - redirect immediately
-            setTokenStorageComplete(true);
-            
-            // Brief delay to ensure token storage is complete, then redirect
-            setTimeout(() => {
-              navigate('/analyze');
-            }, 500);
+            setIsStoringTokens(false);
+            return;
           }
+          
+          console.log('Gmail tokens stored successfully', data);
+          setTokenStorageComplete(true);
+          
+          // Clean URL of OAuth parameters
+          const url = new URL(window.location.href);
+          if (url.searchParams.has('code') || url.searchParams.has('state')) {
+            url.searchParams.delete('code');
+            url.searchParams.delete('state');
+            window.history.replaceState({}, document.title, url.pathname);
+          }
+          
         } catch (error) {
           console.error('Error storing Gmail tokens:', error);
-        } finally {
           setIsStoringTokens(false);
-        }
-        
-        // Clean URL of OAuth parameters
-        const url = new URL(window.location.href);
-        if (url.searchParams.has('code') || url.searchParams.has('state')) {
-          url.searchParams.delete('code');
-          url.searchParams.delete('state');
-          window.history.replaceState({}, document.title, url.pathname);
         }
       }
     };
     
     handleTokenStorage();
-  }, [session, user, tokenStorageComplete, isStoringTokens, checkGmailAccess]);
+  }, [session, user, tokenStorageComplete, isStoringTokens]);
 
   // Redirect immediately after token storage is complete
   useEffect(() => {
     if (tokenStorageComplete) {
       console.log('Token storage complete, redirecting to analyze...');
-      navigate('/analyze');
+      // Small delay to ensure UI updates, then redirect
+      setTimeout(() => {
+        navigate('/analyze');
+      }, 1000);
     }
   }, [tokenStorageComplete, navigate]);
   const handleSignIn = async () => {
