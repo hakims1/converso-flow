@@ -79,7 +79,30 @@ serve(async (req) => {
       );
     }
 
-    const { access_token, refresh_token, expires_at } = await req.json();
+    const requestBody = await req.json();
+    const { access_token, refresh_token, expires_at, clear_tokens } = requestBody;
+
+    // Handle token clearing request
+    if (clear_tokens) {
+      console.log(`Clearing Gmail tokens for user ${user.id}`);
+      const { error: deleteError } = await supabase
+        .from('gmail_tokens')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (deleteError) {
+        console.error('Failed to clear Gmail tokens:', deleteError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to clear tokens' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true, message: 'Tokens cleared' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!refresh_token) {
       return new Response(
@@ -115,14 +138,16 @@ serve(async (req) => {
         gmailAccountEmail = profileData.emailAddress?.toLowerCase() || '';
         
         // SECURITY CHECK: Ensure this Gmail account isn't already connected to another user
-        const { data: existingConnection } = await supabase
+        const { data: existingConnection, error: checkError } = await supabase
           .from('gmail_tokens')
-          .select('user_id')
+          .select('user_id, gmail_account_email')
           .eq('gmail_account_email', gmailAccountEmail)
-          .neq('user_id', user.id)
-          .single();
+          .neq('user_id', user.id);
 
-        if (existingConnection) {
+        if (checkError) {
+          console.error('Error checking existing connections:', checkError);
+        } else if (existingConnection && existingConnection.length > 0) {
+          console.log(`Gmail account ${gmailAccountEmail} already connected to user: ${existingConnection[0].user_id}`);
           return new Response(
             JSON.stringify({ 
               error: 'GMAIL_ACCOUNT_ALREADY_CONNECTED',
