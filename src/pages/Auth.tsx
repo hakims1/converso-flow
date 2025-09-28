@@ -60,6 +60,16 @@ const Auth = () => {
           if (error) {
             console.error('Failed to store Gmail tokens:', error);
             
+            // Handle different error types
+            if (error.message?.includes('401') || error.message?.includes('INVALID_JWT') || 
+                data?.error === 'INVALID_JWT') {
+              console.log('Invalid JWT detected, signing out and retrying...');
+              await supabase.auth.signOut();
+              setStorageError('Authentication expired. Please sign in again.');
+              setIsStoringTokens(false);
+              return;
+            }
+            
             // Check if it's a 409 conflict error (Gmail account already connected)
             if (error.message?.includes('409') || data?.error?.includes('already connected')) {
               setIsConflictError(true);

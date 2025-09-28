@@ -73,8 +73,16 @@ serve(async (req) => {
 
     if (userError || !user) {
       console.error('Failed to get user:', userError);
+      
+      // Provide more specific error information
+      const errorMessage = userError?.message || 'User not found';
+      const isJWTError = errorMessage.includes('JWT') || errorMessage.includes('sub claim');
+      
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ 
+          error: isJWTError ? 'INVALID_JWT' : 'UNAUTHORIZED',
+          message: isJWTError ? 'Invalid or expired authentication token' : 'User authentication failed'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

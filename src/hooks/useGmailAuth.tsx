@@ -34,13 +34,38 @@ export const useGmailAuth = () => {
         }
       });
 
-      if (error || (data?.error && data.error === 'GMAIL_PERMISSIONS_REQUIRED')) {
-        console.log('Gmail access check failed:', error || data?.error);
+      // Handle different error types
+      if (error) {
+        console.log('Gmail access check failed:', error);
+        
+        // Check if this is an authentication error (401/403)
+        if (error.message?.includes('401') || error.message?.includes('403') || 
+            error.message?.includes('Unauthorized') || error.message?.includes('JWT')) {
+          console.log('Authentication error detected, user may need to re-authenticate');
+          // Clear invalid session
+          await supabase.auth.signOut();
+          setState({ 
+            hasGmailAccess: false, 
+            isChecking: false, 
+            needsPermission: true,
+            error: 'Authentication expired. Please sign in again.'
+          });
+          return;
+        }
+        
         setState({ 
           hasGmailAccess: false, 
           isChecking: false, 
           needsPermission: true,
-          error: error?.message || data?.message || 'Gmail permissions required'
+          error: error.message || 'Gmail access check failed'
+        });
+      } else if (data?.error && data.error === 'GMAIL_PERMISSIONS_REQUIRED') {
+        console.log('Gmail permissions required');
+        setState({ 
+          hasGmailAccess: false, 
+          isChecking: false, 
+          needsPermission: true,
+          error: data?.message || 'Gmail permissions required'
         });
       } else {
         console.log('Gmail access confirmed');
