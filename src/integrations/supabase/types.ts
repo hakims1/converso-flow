@@ -58,6 +58,7 @@ export type Database = {
           suggested_response: string | null
           summary: string | null
           topic: string | null
+          updated_at: string | null
           urgency_score: number | null
         }
         Insert: {
@@ -73,6 +74,7 @@ export type Database = {
           suggested_response?: string | null
           summary?: string | null
           topic?: string | null
+          updated_at?: string | null
           urgency_score?: number | null
         }
         Update: {
@@ -88,6 +90,7 @@ export type Database = {
           suggested_response?: string | null
           summary?: string | null
           topic?: string | null
+          updated_at?: string | null
           urgency_score?: number | null
         }
         Relationships: [
