@@ -156,16 +156,30 @@ serve(async (req) => {
           console.error('Error checking existing connections:', checkError);
         } else if (existingConnection && existingConnection.length > 0) {
           console.log(`Gmail account ${gmailAccountEmail} already connected to user: ${existingConnection[0].user_id}`);
-          return new Response(
-            JSON.stringify({ 
-              error: 'GMAIL_ACCOUNT_ALREADY_CONNECTED',
-              message: `Gmail account ${gmailAccountEmail} is already connected to another user account` 
-            }),
-            { 
-              status: 409, 
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            }
-          );
+          
+          // Delete the old connection to allow the current user to connect
+          console.log(`Removing old connection for Gmail account ${gmailAccountEmail}`);
+          const { error: deleteError } = await supabase
+            .from('gmail_tokens')
+            .delete()
+            .eq('gmail_account_email', gmailAccountEmail)
+            .neq('user_id', user.id);
+            
+          if (deleteError) {
+            console.error('Failed to remove old Gmail connection:', deleteError);
+            return new Response(
+              JSON.stringify({ 
+                error: 'FAILED_TO_REMOVE_OLD_CONNECTION',
+                message: 'Failed to remove existing Gmail connection. Please contact support.' 
+              }),
+              { 
+                status: 500, 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              }
+            );
+          }
+          
+          console.log(`Old connection removed, proceeding with new connection for ${gmailAccountEmail}`);
         }
       }
     } catch (profileError) {

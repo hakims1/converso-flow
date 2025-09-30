@@ -70,10 +70,10 @@ const Auth = () => {
               return;
             }
             
-            // Check if it's a 409 conflict error (Gmail account already connected)
-            if (error.message?.includes('409') || data?.error?.includes('already connected')) {
+            // Check if it's a specific error type
+            if (data?.error === 'FAILED_TO_REMOVE_OLD_CONNECTION') {
               setIsConflictError(true);
-              setStorageError('This Gmail account is already connected to another user account. Please use a different Gmail account or contact support if you believe this is an error.');
+              setStorageError('There was an issue connecting your Gmail account. Please contact support for assistance.');
             } else {
               setStorageError(error.message || 'Failed to store Gmail tokens. Please try again.');
             }
