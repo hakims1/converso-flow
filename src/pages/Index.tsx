@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { HeroSection } from '@/components/HeroSection';
-import { SortingBins } from '@/components/SortingBins';
+import { HeroSection } from '@/components/landing/HeroSection';
+import { FeatureCards } from '@/components/landing/FeatureCards';
+import { SortingBins } from '@/components/landing/SortingBins';
+import { Testimonials } from '@/components/landing/Testimonials';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -17,12 +19,18 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-100">
-      {/* Main hero content */}
+    <div className="min-h-screen bg-white">
+      {/* Hero Section */}
       <HeroSection onConnectGmail={handleConnectGmail} />
       
-      {/* Sorting bins below hero content */}
+      {/* Feature Cards */}
+      <FeatureCards />
+      
+      {/* Sorting Bins Animation */}
       <SortingBins />
+      
+      {/* Testimonials */}
+      <Testimonials />
     </div>
   );
 };
