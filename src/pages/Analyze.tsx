@@ -32,19 +32,35 @@ export default function Analyze() {
       setStage('sync');
       setSyncProgress({
         isComplete: false,
-        total: 250,
+        total: 30,
         processed: 0,
-        currentStatus: 'Starting Gmail sync...'
+        currentStatus: 'Connecting to Gmail...'
       });
 
-      // Sync with progress tracking
-      setSyncProgress(prev => ({ ...prev, currentStatus: 'Fetching recent conversations...' }));
-      await syncGmail({ 
-        sinceDays: 14, 
-        maxThreads: 30, // Reduced for faster initial sync
-        fullHistory: false, 
-        silent: true 
-      });
+      // Show progress animation during sync
+      const progressInterval = setInterval(() => {
+        setSyncProgress(prev => {
+          if (prev.processed < prev.total - 5) {
+            return {
+              ...prev,
+              processed: prev.processed + 1,
+              currentStatus: `Syncing conversations... (${prev.processed + 1}/${prev.total})`
+            };
+          }
+          return prev;
+        });
+      }, 2000); // Update every 2 seconds
+
+      try {
+        await syncGmail({ 
+          sinceDays: 14, 
+          maxThreads: 30,
+          fullHistory: false, 
+          silent: true 
+        });
+      } finally {
+        clearInterval(progressInterval);
+      }
       
       setSyncProgress({
         isComplete: true,
