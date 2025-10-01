@@ -102,15 +102,39 @@ const Auth = () => {
     handleTokenStorage();
   }, [session, user, tokenStorageComplete, isStoringTokens, storageError]);
 
-  // Redirect immediately after token storage is complete
+  // Auto-sync and redirect after token storage is complete
   useEffect(() => {
-    if (tokenStorageComplete) {
-      console.log('Token storage complete, redirecting to analyze...');
-      // Small delay to ensure UI updates, then redirect
-      setTimeout(() => {
-        navigate('/analyze');
-      }, 1000);
-    }
+    const performAutoSync = async () => {
+      if (tokenStorageComplete) {
+        console.log('Token storage complete, starting auto-sync...');
+        
+        try {
+          // Perform initial sync automatically
+          const { supabase } = await import('@/integrations/supabase/client');
+          console.log('Triggering initial Gmail sync...');
+          
+          await supabase.functions.invoke('gmail-sync', {
+            body: {
+              full_history: false,
+              since_days: 30,
+              max_threads: 50,
+            },
+          });
+          
+          console.log('Auto-sync complete, redirecting to analyze...');
+        } catch (error) {
+          console.error('Auto-sync failed (non-blocking):', error);
+          // Still redirect even if sync fails - user can retry from analyze page
+        }
+        
+        // Redirect to analyze page
+        setTimeout(() => {
+          navigate('/analyze');
+        }, 500);
+      }
+    };
+    
+    performAutoSync();
   }, [tokenStorageComplete, navigate]);
   const handleSignIn = async () => {
     try {

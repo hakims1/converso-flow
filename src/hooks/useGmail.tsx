@@ -48,8 +48,8 @@ export const useGmail = () => {
       opts
     });
 
-    const sinceDays = opts?.sinceDays ?? (opts?.incremental ? 7 : 180); // Incremental: 7 days, Full: 6 months
-    const maxThreads = opts?.maxThreads ?? (opts?.incremental ? 50 : 100);
+    const sinceDays = opts?.sinceDays ?? (opts?.incremental ? 7 : 30); // Incremental: 7 days, Default: 30 days (free tier)
+    const maxThreads = opts?.maxThreads ?? (opts?.incremental ? 50 : 50); // Default: 50 conversations (free tier)
     const fullHistory = opts?.fullHistory ?? false;
 
     setLoading(true);

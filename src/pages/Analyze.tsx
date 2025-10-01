@@ -33,30 +33,16 @@ export default function Analyze() {
       setStage('sync');
       setSyncProgress({
         isComplete: false,
-        total: 30,
+        total: 50,
         processed: 0,
-        currentStatus: 'Connecting to Gmail...'
+        currentStatus: 'Syncing Gmail conversations...'
       });
-
-      // Show progress animation during sync
-      const progressInterval = setInterval(() => {
-        setSyncProgress(prev => {
-          if (prev.processed < prev.total - 5) {
-            return {
-              ...prev,
-              processed: prev.processed + 1,
-              currentStatus: `Syncing conversations... (${prev.processed + 1}/${prev.total})`
-            };
-          }
-          return prev;
-        });
-      }, 2000); // Update every 2 seconds
 
       try {
         console.log('📧 Calling syncGmail...');
         await syncGmail({ 
-          sinceDays: 14, 
-          maxThreads: 30,
+          sinceDays: 30,  // Free tier: last 30 days
+          maxThreads: 50, // Free tier: up to 50 conversations
           fullHistory: false, 
           silent: true 
         });
@@ -64,14 +50,12 @@ export default function Analyze() {
       } catch (syncError) {
         console.error('❌ syncGmail failed:', syncError);
         throw syncError;
-      } finally {
-        clearInterval(progressInterval);
       }
       
       setSyncProgress({
         isComplete: true,
-        total: 30,
-        processed: 30,
+        total: 50,
+        processed: 50,
         currentStatus: 'Sync complete!'
       });
 
@@ -79,15 +63,16 @@ export default function Analyze() {
       setStage('analysis');
       setAnalysisProgress({
         isComplete: false,
-        total: 25, // Reduced for faster results
+        total: 50,
         processed: 0,
-        currentStatus: 'Starting AI analysis...'
+        currentStatus: 'Analyzing conversations with AI...'
       });
 
+      console.log('🤖 Starting AI analysis...');
       await analyzeConversations({ 
         sinceLast: true, 
-        cutoffDays: 14, 
-        max: 25,
+        cutoffDays: 30, 
+        max: 50,
         onProgress: (processed, total, status) => {
           setAnalysisProgress({
             isComplete: false,
