@@ -54,7 +54,18 @@ export const useGmail = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('gmail-sync', {
+      console.log('🚀 Invoking gmail-sync function...', {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        params: { fullHistory, sinceDays, maxThreads }
+      });
+
+      // Add timeout to prevent indefinite hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gmail sync timeout after 2 minutes')), 120000)
+      );
+
+      const syncPromise = supabase.functions.invoke('gmail-sync', {
         body: {
           full_history: fullHistory,
           since_days: sinceDays,
@@ -62,7 +73,15 @@ export const useGmail = () => {
         },
       });
 
-      console.log('📡 Gmail sync response:', { data, error });
+      const result = await Promise.race([syncPromise, timeoutPromise]) as any;
+      const { data, error } = result;
+
+      console.log('📡 Gmail sync response:', { 
+        success: data?.success,
+        messageCount: data?.messages?.length,
+        error: error?.message,
+        rawError: error 
+      });
 
       if (error) {
         // Check if it's a permissions error

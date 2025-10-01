@@ -28,6 +28,7 @@ export default function Analyze() {
   });
   const handleAnalyze = async () => {
     try {
+      console.log('🔵 Starting analysis flow...');
       setShowProgress(true);
       setStage('sync');
       setSyncProgress({
@@ -52,12 +53,17 @@ export default function Analyze() {
       }, 2000); // Update every 2 seconds
 
       try {
+        console.log('📧 Calling syncGmail...');
         await syncGmail({ 
           sinceDays: 14, 
           maxThreads: 30,
           fullHistory: false, 
           silent: true 
         });
+        console.log('✅ syncGmail completed');
+      } catch (syncError) {
+        console.error('❌ syncGmail failed:', syncError);
+        throw syncError;
       } finally {
         clearInterval(progressInterval);
       }
