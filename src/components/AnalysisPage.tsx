@@ -1,13 +1,15 @@
 import { Button } from '@/components/ui/button';
-import { Mail, MessageSquare, Users, Tags, BarChart3 } from 'lucide-react';
+import { Mail, MessageSquare, Users, Tags, BarChart3, Crown } from 'lucide-react';
 
 interface AnalysisPageProps {
   onAnalyze: () => void;
   onBack: () => void;
   loading?: boolean;
+  isPaidMode?: boolean;
+  onTogglePaidMode?: () => void;
 }
 
-export function AnalysisPage({ onAnalyze, onBack, loading = false }: AnalysisPageProps) {
+export function AnalysisPage({ onAnalyze, onBack, loading = false, isPaidMode = false, onTogglePaidMode }: AnalysisPageProps) {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation Bar with Logo and Tabs */}
@@ -39,8 +41,23 @@ export function AnalysisPage({ onAnalyze, onBack, loading = false }: AnalysisPag
             </div>
           </div>
 
-          {/* Empty div to balance the flex layout */}
-          <div className="w-32"></div>
+          {/* Paid Mode Toggle */}
+          <div className="w-32 flex justify-end">
+            {onTogglePaidMode && (
+              <Button
+                variant={isPaidMode ? "default" : "outline"}
+                size="sm"
+                onClick={onTogglePaidMode}
+                className={isPaidMode 
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0" 
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                }
+              >
+                <Crown className="w-4 h-4 mr-2" />
+                {isPaidMode ? 'Paid Mode' : 'Test Paid'}
+              </Button>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -49,7 +66,10 @@ export function AnalysisPage({ onAnalyze, onBack, loading = false }: AnalysisPag
         <div className="text-center mb-16 pt-12">
           {/* Main Title */}
           <h1 className="text-3xl md:text-4xl text-gray-900 mb-4">
-            Analyze your last two weeks of emails for free
+            {isPaidMode 
+              ? 'Analyze your last 3 months of emails' 
+              : 'Analyze your last two weeks of emails for free'
+            }
           </h1>
 
           {/* Subtitle */}
