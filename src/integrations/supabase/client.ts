@@ -2,8 +2,10 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://tshyqizvsgvgrxygubqh.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzaHlxaXp2c2d2Z3J4eWd1YnFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1NDQ3MTIsImV4cCI6MjA3MDEyMDcxMn0.d3leq9X11bUQmu07-Q7doYMCQkvwCkZ6E-NZCuzb0XE";
+// Reads from Vite env vars (set in .env locally and in Vercel for production),
+// falling back to the current project so a missing var can't silently point at a dead project.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? "https://onnbjjfxcvlgyhmfjpzx.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ubmJqamZ4Y3ZsZ3lobWZqcHp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NjY4MzUsImV4cCI6MjA5ODM0MjgzNX0.6MbZ-Ms90-wjq2Oxk-8M-vB1D4DLdT4PN7kkSFKh8kE";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

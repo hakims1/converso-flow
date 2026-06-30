@@ -1,4 +1,4 @@
-project_id = "tshyqizvsgvgrxygubqh"
+project_id = "onnbjjfxcvlgyhmfjpzx"
 
 [api]
 enabled = true
@@ -21,8 +21,7 @@ max_client_conn = 100
 
 [realtime]
 enabled = true
-port = 54323
-ip_version = "ipv4"
+ip_version = "IPv4"
 
 [studio]
 enabled = true
@@ -30,43 +29,29 @@ port = 54324
 api_url = "http://127.0.0.1:54321"
 openai_api_key = "env(OPENAI_API_KEY)"
 
-[inbucket]
-enabled = true
-port = 54325
-smtp_port = 54326
-pop3_port = 54327
-
 [storage]
 enabled = true
-port = 54328
 image_transformation = {enabled = true}
 
 [auth]
 enabled = true
-port = 54329
 site_url = "http://127.0.0.1:3000"
-additional_redirect_urls = ["https://tshyqizvsgvgrxygubqh.supabase.co"]
+additional_redirect_urls = ["https://onnbjjfxcvlgyhmfjpzx.supabase.co"]
 jwt_expiry = 3600
 enable_signup = true
-enable_email_confirmations = false
-enable_email_change_confirmations = true
-enable_phone_confirmations = false
-enable_phone_change_confirmations = true
 
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
-template = {}
 
 [auth.sms]
 enable_signup = false
 enable_confirmations = false
 template = "Your code is {{ .Code }}"
 
-[edge_functions]
+[edge_runtime]
 enabled = true
-port = 54330
 inspector_port = 54331
 
 [functions.gmail-sync]

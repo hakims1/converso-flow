@@ -6,28 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Encryption utility with shared IV
-async function encryptTextWithIV(text: string, key: string, iv: Uint8Array): Promise<{ encrypted: string; iv: string }> {
+// Encryption utility: generates an INDEPENDENT random IV per call.
+// IMPORTANT: access token and refresh token are encrypted separately, each
+// with its own IV. Reusing one IV across both tokens (the previous design)
+// caused the refresh token to become undecryptable after an access-token
+// refresh overwrote the shared IV -> users were logged out ~hourly.
+async function encryptText(text: string, key: string): Promise<{ encrypted: string; iv: string }> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  
-  // Use same key derivation as gmail-sync for consistency
   const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
-  
   const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
+    'raw', keyData, { name: 'AES-GCM' }, false, ['encrypt']
   );
-  
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    cryptoKey,
-    data
+    { name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, encoder.encode(text)
   );
-  
   return {
     encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
     iv: btoa(String.fromCharCode(...iv))
@@ -121,15 +114,11 @@ serve(async (req) => {
 
     console.log(`Storing Gmail tokens for user ${user.id}`);
 
-    // Encrypt tokens using shared IV for consistent decryption
-    const sharedIV = crypto.getRandomValues(new Uint8Array(12));
-    const sharedIVBase64 = btoa(String.fromCharCode(...sharedIV));
-    
-    const encryptedRefreshToken = await encryptTextWithIV(refresh_token, encryptionKey, sharedIV);
-    let encryptedAccessToken = null;
-    
+    // Encrypt each token with its OWN independent IV.
+    const encryptedRefreshToken = await encryptText(refresh_token, encryptionKey);
+    let encryptedAccessToken: { encrypted: string; iv: string } | null = null;
     if (access_token) {
-      encryptedAccessToken = await encryptTextWithIV(access_token, encryptionKey, sharedIV);
+      encryptedAccessToken = await encryptText(access_token, encryptionKey);
     }
 
     // Get Gmail account email to check for existing connections
@@ -192,9 +181,10 @@ serve(async (req) => {
       .upsert({
         user_id: user.id,
         encrypted_access_token: encryptedAccessToken?.encrypted || null,
+        access_token_iv: encryptedAccessToken?.iv || null,      // access-token IV
         encrypted_refresh_token: encryptedRefreshToken.encrypted,
+        encryption_iv: encryptedRefreshToken.iv,                // refresh-token IV
         token_expires_at: expires_at ? new Date(expires_at * 1000).toISOString() : null,
-        encryption_iv: sharedIVBase64, // Shared IV for both tokens
         gmail_account_email: gmailAccountEmail
       }, {
         onConflict: 'user_id'

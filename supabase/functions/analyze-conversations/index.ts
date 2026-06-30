@@ -257,22 +257,7 @@ if (cutoffDays) {
         // Get all user email addresses (Gmail account + profile emails)
         const userEmails = [gmailAccountEmail, user.email || ''].filter(Boolean);
         
-        // For Matt Hakimi specifically, add known business email patterns
-        // This logic can be expanded for other users as needed
-        if (gmailAccountEmail.includes('matt.hakims@gmail.com')) {
-          userEmails.push('matt@peachscore.com'); // Known business email
-        }
-        
-        // Also check participants array for patterns where user appears as sender
-        const additionalUserEmails = conversation.participants
-          ?.filter((p: string) => p.toLowerCase().includes('matt') && p.includes('@'))
-          .map((p: string) => {
-            const emailMatch = p.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-            return emailMatch ? emailMatch[1] : null;
-          })
-          .filter(Boolean) || [];
-        
-        userEmails.push(...additionalUserEmails);
+        // (Generalized: identity = connected Gmail account + auth email only)
         
         const isSimpleOutreach = isSingleOutgoingEmail(fullContent, userEmails, conversation.message_count || 1, conversation.participants || []);
         console.log(`Conversation ${conversation.id}: isSimpleOutreach=${isSimpleOutreach}, messageCount=${conversation.message_count}, userEmails=${JSON.stringify(userEmails)}, participants=${JSON.stringify(conversation.participants)}`)

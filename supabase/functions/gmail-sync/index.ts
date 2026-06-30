@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
     // Get stored Gmail tokens
     const { data: tokenData, error: tokenError } = await supabase
       .from('gmail_tokens')
-      .select('encrypted_access_token, encrypted_refresh_token, token_expires_at, encryption_iv')
+      .select('encrypted_access_token, access_token_iv, encrypted_refresh_token, token_expires_at, encryption_iv')
       .eq('user_id', user.id)
       .single();
 
@@ -263,8 +263,9 @@ Deno.serve(async (req) => {
           .from('gmail_tokens')
           .update({
             encrypted_access_token: encryptedAccessToken.encrypted,
-            token_expires_at: newExpiry.toISOString(),
-            encryption_iv: encryptedAccessToken.iv
+            access_token_iv: encryptedAccessToken.iv,   // store ACCESS-token IV separately
+            token_expires_at: newExpiry.toISOString()
+            // NOTE: do NOT touch encryption_iv here -- it belongs to the refresh token
           })
           .eq('user_id', user.id);
           
@@ -276,7 +277,7 @@ Deno.serve(async (req) => {
     } else {
       // Decrypt existing access token
       try {
-        accessToken = await decryptText(tokenData.encrypted_access_token, masterEncryptionKey, tokenData.encryption_iv);
+        accessToken = await decryptText(tokenData.encrypted_access_token, masterEncryptionKey, tokenData.access_token_iv ?? tokenData.encryption_iv);
       } catch (error) {
         console.error('Failed to decrypt access token:', error);
         return new Response(
@@ -589,8 +590,10 @@ Deno.serve(async (req) => {
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + retentionDays);
 
-        // Store encrypted email content
-        await supabaseAuthed
+        // Store encrypted email content via SERVICE-ROLE client.
+        // email_contents is locked to server-side only (no anon/authenticated grants),
+        // so the user-context client cannot write it.
+        await supabase
           .from('email_contents')
           .upsert({
             conversation_id: conversationRow.id,
