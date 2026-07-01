@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ const GmailSync = () => {
   const { hasGmailAccess, isChecking, needsPermission, checkGmailAccess } = useGmailAuth();
   const { session, signInWithGoogle } = useAuth();
   const [hasInitialSync, setHasInitialSync] = useState(false);
+  const baselineStartedRef = useRef(false);
   const analysis = useAnalysis();
   
   const handleSync = async () => {
@@ -39,20 +40,25 @@ const GmailSync = () => {
     await checkGmailAccess();
   };
 
-  // Auto-run baseline sync after permissions are granted
+  // Auto-run baseline sync + analysis ONCE after permissions are granted.
+  // The ref guard is set synchronously before the async begins, so re-renders
+  // during the (multi-minute) run can't stack up concurrent sync/analyze loops.
+  // (syncGmail/analysis are intentionally NOT in the deps — they're new objects
+  // each render and would otherwise re-fire this effect on every render.)
   useEffect(() => {
     if (!session || !hasGmailAccess || needsPermission || isChecking || hasInitialSync) return;
-    
+    if (baselineStartedRef.current) return;
+
     const userId = session.user?.id;
     if (!userId) return;
-    
+
     const flagKey = `gmail_baseline_synced_${userId}`;
-    const alreadySynced = localStorage.getItem(flagKey) === 'true';
-    if (alreadySynced) {
+    if (localStorage.getItem(flagKey) === 'true') {
       setHasInitialSync(true);
       return;
     }
 
+    baselineStartedRef.current = true;
     console.log('🚀 Running baseline Gmail sync for last 6 months...');
     (async () => {
       try {
@@ -62,9 +68,11 @@ const GmailSync = () => {
         setHasInitialSync(true);
       } catch (e) {
         console.error('Baseline Gmail sync failed:', e);
+        baselineStartedRef.current = false; // allow a retry on a later mount
       }
     })();
-  }, [session, hasGmailAccess, needsPermission, isChecking, hasInitialSync, syncGmail, analysis]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, hasGmailAccess, needsPermission, isChecking, hasInitialSync]);
 
   const formatDate = (dateString: string) => {
     try {
