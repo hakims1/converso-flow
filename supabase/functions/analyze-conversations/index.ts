@@ -354,7 +354,14 @@ if (cutoffDays) {
         
         if (!parsedData) {
           console.error(`Failed to parse JSON for conversation ${conversation.id}:`, analysisText);
-          
+
+          // Diagnostic (persists via INSERT): capture a snippet of the unparseable output.
+          await logDataAccess(supabase, user.id, 'analyze_error', 'conversation', 1, {
+            conversation_id: conversation.id,
+            error_code: 'PARSE_ERROR',
+            raw_snippet: String(analysisText || '').slice(0, 300),
+          });
+
           // Update attempt record with parse error
           await supabase
             .from('conversation_analysis_attempts')
@@ -434,7 +441,15 @@ if (cutoffDays) {
       } catch (error: any) {
         console.error(`Error analyzing conversation ${conversation.id}:`, error);
         const processingTime = Date.now() - startTime;
-        
+
+        // Diagnostic: record the real reason via an INSERT (persists reliably) so we
+        // can see WHY analyses fail even when the attempt UPDATE below doesn't stick.
+        await logDataAccess(supabase, user.id, 'analyze_error', 'conversation', 1, {
+          conversation_id: conversation.id,
+          error_code: 'ANALYSIS_ERROR',
+          error: String(error?.message || error).slice(0, 500),
+        });
+
         // Update attempt record with error
         await supabase
           .from('conversation_analysis_attempts')
