@@ -545,24 +545,21 @@ Deno.serve(async (req) => {
           return transactionalSubjectPatterns.some(p => p.test(subj));
         });
 
-        // Smarter broadcast detection: instead of dropping every single inbound
-        // message the user hasn't replied to (which would bury genuinely important
-        // emails addressed to them), only treat it as a broadcast when the user was
-        // NOT a direct recipient. A mass blast / notification list typically doesn't
-        // put you in To/Cc (you're bcc'd or on a hidden list), whereas a real person
-        // writing to you does. So: single inbound + user never sent + user not in
-        // To/Cc  ->  broadcast. A personal email addressed to you is always kept,
-        // even if you haven't replied yet (that's exactly "You Should Respond").
-        const isInboundBroadcast =
-          allMessages.length === 1 && !userIsSender && !userIsDirectRecipient;
+        // NOTE: we intentionally do NOT drop "single inbound, unanswered" threads.
+        // Inboxes aggregate mail sent to aliases / forwarded addresses, so we can't
+        // reliably tell whether the user was a direct recipient — and guessing wrong
+        // buries genuinely important personal email. Automated mail is instead caught
+        // by the content/sender/header signals below, which don't depend on knowing
+        // every address the user owns. (userIsSender / userIsDirectRecipient remain
+        // available for ranking/UX, just not for hard filtering.)
+        void userIsDirectRecipient;
 
-        // Skip thread if ANY automated / broadcast indicator is found
+        // Skip thread if ANY automated indicator is found
         const shouldSkip = hasAutomatedHeaders ||
                            hasAutomatedContent ||
                            hasAutomatedSender ||
                            hasNoReplySender ||
-                           hasTransactionalSubject ||
-                           isInboundBroadcast;
+                           hasTransactionalSubject;
 
         if (shouldSkip) {
           console.log(`Skipping automated/broadcast thread: ${thread.id}`);
