@@ -532,7 +532,12 @@ The main user whose perspective we are analyzing is: ${userName} (${userEmail})
 - ALL analysis must be from ${userName}'s perspective
 - ALL completion status determinations are about what ${userName} needs to do
 
-CONVERSATION: ${content}
+SUBJECT: ${subject}
+PARTICIPANTS: ${participants}
+MESSAGE COUNT: ${msgCount}
+
+CONVERSATION (its first line, "Most recent message sent by:", states who sent the latest message):
+${content}
 
 ANALYSIS INSTRUCTIONS:
 
@@ -552,7 +557,7 @@ CRITICAL: You MUST carefully identify who sent the most recent message to determ
 
 STEP-BY-STEP PROCESS:
 1. IDENTIFY THE MOST RECENT MESSAGE: Look at the email conversation chronologically - the LAST message in the thread
-2. DETERMINE WHO SENT IT: Check if the sender is ${userName} (${userEmail}) or someone else
+2. DETERMINE WHO SENT IT: The "Most recent message sent by:" line at the top of the conversation names the sender of the latest message. If it matches ${userName} (${userEmail}), the user sent it; otherwise someone else did.
 3. ANALYZE THE CONTENT: What type of message was it?
 4. APPLY THE RULES BELOW:
 
@@ -564,7 +569,7 @@ IF the most recent message was sent BY ${userName}:
 IF the most recent message was sent TO ${userName} (by someone else):
 - If it asks a question or requests something from ${userName} → "needs_response"
 - If it just shares information → "complete"
-- If it's a thank you or acknowledgment → "complete"
+- If it's a thank you, acknowledgment, agreement, or confirmation (e.g. "confirmed", "sounds good", "great, thanks", "will do") with nothing left open → "complete"
 
 Action Items Guidelines:
 Only include action items that ${userName} specifically needs to do based on the conversation. These should be:

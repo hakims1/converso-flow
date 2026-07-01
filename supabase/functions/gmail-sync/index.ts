@@ -620,27 +620,13 @@ Deno.serve(async (req) => {
 
         const retentionDays = profileData?.email_retention_days || 30;
 
-        // Build the FULL thread as structured text so analysis sees the entire
-        // conversation (who said what) instead of just the last message. The old
-        // approach stored only the most recent message (capped at 1500 chars),
-        // which hid earlier context and caused mis-categorization -- e.g. missing an
-        // earlier "confirmed" and marking a resolved thread as pending_response.
-        const threadText = threadData.messages
-          .map((msg) => {
-            const from = msg.payload.headers.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown';
-            const dateHdr = msg.payload.headers.find(h => h.name.toLowerCase() === 'date')?.value || '';
-            const speaker = from.toLowerCase().includes(userEmail) ? `ME <${from}>` : from;
-            const body = cleanSingleMessage(extractTextFromMessage(msg));
-            return body ? `From: ${speaker}${dateHdr ? ` (${dateHdr})` : ''}\n${body}` : '';
-          })
-          .filter(Boolean)
-          .join('\n\n----- next message -----\n\n');
-
-        // Cap total size to keep token cost sane, keeping the MOST RECENT messages.
-        const MAX_CONTENT_CHARS = 12000;
-        const cleanedContent = threadText.length > MAX_CONTENT_CHARS
-          ? '...(older messages truncated)...\n\n' + threadText.slice(-MAX_CONTENT_CHARS)
-          : threadText;
+        // Extract and clean content from ONLY the most recent message (which contains full history).
+        // Prepend WHO sent the latest message: completion_status hinges on who spoke last, but
+        // cleanEmailContent strips sender attribution. One cheap line, no extra thread content.
+        const mostRecentMessage = threadData.messages[threadData.messages.length - 1];
+        const lastFrom = mostRecentMessage.payload.headers.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown';
+        const rawContent = extractTextFromMessage(mostRecentMessage);
+        const cleanedContent = `Most recent message sent by: ${lastFrom}\n\n${cleanEmailContent(rawContent)}`;
 
         const { encrypted: encryptedContent, iv } = await encryptText(cleanedContent, masterEncryptionKey);
 
@@ -718,24 +704,6 @@ Deno.serve(async (req) => {
 });
 
 // Helper function to clean email content by removing signatures and extracting recent messages
-// Clean a SINGLE Gmail message body: strip HTML and this message's quoted reply
-// history (each message is stored separately, so quotes would just duplicate).
-// Deliberately does NOT strip signatures / "Thanks," lines -- that risks deleting
-// meaningful content like a trailing "confirmed". Claude tolerates signatures fine.
-function cleanSingleMessage(rawContent: string): string {
-  let c = rawContent
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-  // Drop quoted history within this message (prior messages are included separately).
-  c = c.split(/On .{0,120}? wrote:/i)[0];
-  return c.trim();
-}
-
 function cleanEmailContent(rawContent: string): string {
   // Remove HTML tags
   let content = rawContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
