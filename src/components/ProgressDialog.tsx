@@ -40,7 +40,7 @@ export function ProgressDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <Card className="w-full max-w-md bg-card border shadow-2xl">
+      <Card className="relative w-full max-w-md bg-white dark:bg-neutral-900 border shadow-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {stage === 'complete' ? (
