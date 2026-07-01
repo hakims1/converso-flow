@@ -434,11 +434,13 @@ Deno.serve(async (req) => {
         // Extract participants and check if user participated
         const participants = new Set<string>();
         let userParticipated = false;
-        let userIsSender = false;   // did the user actually SEND a message in this thread?
+        let userIsSender = false;          // did the user actually SEND a message in this thread?
+        let userIsDirectRecipient = false; // was the user in To/Cc (addressed to them personally)?
 
         for (const message of threadData.messages) {
           for (const header of message.payload.headers) {
-            if (header.name.toLowerCase() === 'from') {
+            const headerName = header.name.toLowerCase();
+            if (headerName === 'from') {
               const fromEmail = header.value.toLowerCase();
               participants.add(header.value);
               if (fromEmail.includes(userEmail)) {
@@ -446,11 +448,12 @@ Deno.serve(async (req) => {
                 userIsSender = true;
               }
             }
-            if (header.name.toLowerCase() === 'to') {
-              const toEmails = header.value.toLowerCase();
+            if (headerName === 'to' || headerName === 'cc') {
+              const recipients = header.value.toLowerCase();
               participants.add(header.value);
-              if (toEmails.includes(userEmail)) {
+              if (recipients.includes(userEmail)) {
                 userParticipated = true;
+                userIsDirectRecipient = true;
               }
             }
           }
@@ -504,13 +507,16 @@ Deno.serve(async (req) => {
             return pattern.test(subject) || pattern.test(body);
           });
 
-        // Check for automated sender domains
+        // Bulk email-service-provider infrastructure domains. A real person never
+        // sends personal mail from these, so matching them is safe and general.
+        // (Deliberately NOT listing product companies like apple/vercel/stripe —
+        // those would false-positive on a real person who works there, and the
+        // standards-based signals below catch their automated mail anyway.)
         const automatedDomains = [
-          'mailchimp.com', 'constantcontact.com', 'sendgrid.net',
-          'amazonses.com', 'notifications.google.com', 'github.com',
-          'linkedin.com', 'facebook.com', 'twitter.com', 'instagram.com',
-          'vercel.com', 'email.apple.com', 'apple.com', 'testflight',
-          'stripe.com', 'atlassian.net', 'slack.com', 'notion.so'
+          'mailchimp.com', 'mailchimpapp.net', 'constantcontact.com',
+          'sendgrid.net', 'sparkpostmail.com', 'mailgun.org',
+          'amazonses.com', 'sendinblue.com', 'mandrillapp.com',
+          'notifications.google.com'
         ];
 
         const hasAutomatedSender = allMessages.some(msg => {
@@ -539,9 +545,16 @@ Deno.serve(async (req) => {
           return transactionalSubjectPatterns.some(p => p.test(subj));
         });
 
-        // AGGRESSIVE: a single inbound message the user never replied to is a
-        // broadcast / notification / cold-outreach, not an ongoing conversation.
-        const isInboundBroadcast = allMessages.length === 1 && !userIsSender;
+        // Smarter broadcast detection: instead of dropping every single inbound
+        // message the user hasn't replied to (which would bury genuinely important
+        // emails addressed to them), only treat it as a broadcast when the user was
+        // NOT a direct recipient. A mass blast / notification list typically doesn't
+        // put you in To/Cc (you're bcc'd or on a hidden list), whereas a real person
+        // writing to you does. So: single inbound + user never sent + user not in
+        // To/Cc  ->  broadcast. A personal email addressed to you is always kept,
+        // even if you haven't replied yet (that's exactly "You Should Respond").
+        const isInboundBroadcast =
+          allMessages.length === 1 && !userIsSender && !userIsDirectRecipient;
 
         // Skip thread if ANY automated / broadcast indicator is found
         const shouldSkip = hasAutomatedHeaders ||
