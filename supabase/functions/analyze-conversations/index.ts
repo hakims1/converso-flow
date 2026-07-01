@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     }
 
 const respect_tier = body.respect_tier === true
-const model = body.model || 'claude-3-5-haiku-20241022'
+const model = body.model || 'claude-haiku-4-5-20251001'
 const since_last = body.since_last === true
 const requestedMax = typeof body.max_to_analyze === 'number' ? Math.max(1, Math.min(1000, body.max_to_analyze)) : 75
 const cutoffDays = typeof body.cutoff_days === 'number' ? Math.max(1, Math.min(365, body.cutoff_days)) : 180
@@ -288,7 +288,7 @@ if (cutoffDays) {
                 'anthropic-version': '2023-06-01'
               },
               body: JSON.stringify({
-                model: model || 'claude-3-5-sonnet-20241022',
+                model: model || 'claude-haiku-4-5-20251001',
                 max_tokens: 1000,
                 temperature: 0.1,
                 messages: [{ role: 'user', content: prompt }]

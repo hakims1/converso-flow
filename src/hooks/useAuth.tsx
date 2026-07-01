@@ -30,65 +30,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session and validate user exists
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        // Validate the session by making a test API call
-        try {
-          const { error } = await supabase.auth.getUser();
-          if (error || error?.message?.includes('JWT')) {
-            // Session is invalid, clear it
-            console.log('Invalid session detected, signing out:', error);
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-          } else {
-            setSession(session);
-            setUser(session.user);
-          }
-        } catch (err) {
-          console.log('Session validation failed, clearing session:', err);
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-        }
-      } else {
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
+    // IMPORTANT: never await other supabase.auth.* calls (getUser/signOut/etc.)
+    // inside these callbacks. GoTrue serializes auth calls behind a lock; awaiting
+    // one here holds that lock and deadlocks every subsequent query, so all reads
+    // hang in a permanent loading state. The session passed to these callbacks is
+    // already validated and auto-refreshed by the client, so set it synchronously.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
+      setSession(session);
+      setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        
-        if (event === 'SIGNED_OUT' || !session) {
-          setSession(null);
-          setUser(null);
-        } else if (session?.user) {
-          // Validate new sessions
-          try {
-            const { error } = await supabase.auth.getUser();
-            if (error) {
-              console.log('New session validation failed:', error);
-              await supabase.auth.signOut();
-              setSession(null);
-              setUser(null);
-            } else {
-              setSession(session);
-              setUser(session.user);
-            }
-          } catch (err) {
-            console.log('Session validation error:', err);
-            setSession(null);
-            setUser(null);
-          }
-        }
-        setLoading(false);
-      }
-    );
+    // Load any existing session on first mount.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
