@@ -39,8 +39,8 @@ export function ProgressDialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <Card className="w-full max-w-md bg-card border shadow-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {stage === 'complete' ? (

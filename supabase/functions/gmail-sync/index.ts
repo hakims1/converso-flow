@@ -434,6 +434,7 @@ Deno.serve(async (req) => {
         // Extract participants and check if user participated
         const participants = new Set<string>();
         let userParticipated = false;
+        let userIsSender = false;   // did the user actually SEND a message in this thread?
 
         for (const message of threadData.messages) {
           for (const header of message.payload.headers) {
@@ -442,6 +443,7 @@ Deno.serve(async (req) => {
               participants.add(header.value);
               if (fromEmail.includes(userEmail)) {
                 userParticipated = true;
+                userIsSender = true;
               }
             }
             if (header.name.toLowerCase() === 'to') {
@@ -506,7 +508,9 @@ Deno.serve(async (req) => {
         const automatedDomains = [
           'mailchimp.com', 'constantcontact.com', 'sendgrid.net',
           'amazonses.com', 'notifications.google.com', 'github.com',
-          'linkedin.com', 'facebook.com', 'twitter.com', 'instagram.com'
+          'linkedin.com', 'facebook.com', 'twitter.com', 'instagram.com',
+          'vercel.com', 'email.apple.com', 'apple.com', 'testflight',
+          'stripe.com', 'atlassian.net', 'slack.com', 'notion.so'
         ];
 
         const hasAutomatedSender = allMessages.some(msg => {
@@ -515,13 +519,40 @@ Deno.serve(async (req) => {
           return automatedDomains.some(domain => fromValue.includes(domain));
         });
 
-        // Skip thread if ANY automated indicator is found
-        const shouldSkip = hasAutomatedHeaders || 
-                           hasAutomatedContent || 
-                           hasAutomatedSender;
+        // No-reply / notification sender addresses (login codes, alerts, etc.)
+        const hasNoReplySender = allMessages.some(msg => {
+          const fromHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'from');
+          const fromValue = (fromHeader?.value || '').toLowerCase();
+          return /no[-_.]?reply|do[-_.]?not[-_.]?reply|notification|automated|mailer-daemon|postmaster/.test(fromValue);
+        });
+
+        // Transactional subjects: one-time/login/OTP codes, TestFlight/app-store notices.
+        const transactionalSubjectPatterns = [
+          /\b(login|log[- ]?in|verification|security|one[- ]?time|access|confirmation)\b.{0,15}code/i,
+          /is your .{0,20}code/i,
+          /\bOTP\b/i,
+          /(is now )?available to test\b/i
+        ];
+        const hasTransactionalSubject = allMessages.some(msg => {
+          const subjectHeader = msg.payload.headers.find(h => h.name.toLowerCase() === 'subject');
+          const subj = subjectHeader?.value || '';
+          return transactionalSubjectPatterns.some(p => p.test(subj));
+        });
+
+        // AGGRESSIVE: a single inbound message the user never replied to is a
+        // broadcast / notification / cold-outreach, not an ongoing conversation.
+        const isInboundBroadcast = allMessages.length === 1 && !userIsSender;
+
+        // Skip thread if ANY automated / broadcast indicator is found
+        const shouldSkip = hasAutomatedHeaders ||
+                           hasAutomatedContent ||
+                           hasAutomatedSender ||
+                           hasNoReplySender ||
+                           hasTransactionalSubject ||
+                           isInboundBroadcast;
 
         if (shouldSkip) {
-          console.log(`Skipping automated thread: ${thread.id}`);
+          console.log(`Skipping automated/broadcast thread: ${thread.id}`);
           continue;
         }
 
