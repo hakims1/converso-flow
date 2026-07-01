@@ -43,9 +43,14 @@ export const useAnalysis = () => {
     // to time out mid-run (leaving most conversations unanalyzed + orphaned
     // "pending" attempt rows). since_last:true means each call takes the NEXT
     // not-yet-analyzed batch, so the loop steadily drains the backlog.
-    const batchSize = opts?.max ?? 8;
+    // Batch size is a FIXED small constant so each call completes fast and the
+    // progress bar advances every ~15-20s. `opts.max` is treated as an overall cap
+    // on how many to analyze this run (NOT the batch size) — otherwise a caller
+    // passing max:50 collapses this back into one slow call that shows no progress.
+    const BATCH_SIZE = 8;
+    const overallCap = opts?.max ?? Number.POSITIVE_INFINITY;
     const cutoffDays = opts?.cutoffDays ?? 180; // cover synced history, not just 2 weeks
-    const maxIterations = 40; // safety cap (40 * 8 = 320 conversations)
+    const maxIterations = 60; // safety cap
 
     let totalProcessed = 0;
     let totalFailed = 0;
@@ -55,10 +60,13 @@ export const useAnalysis = () => {
 
     try {
       for (let i = 0; i < maxIterations; i++) {
+        const thisBatch = Math.min(BATCH_SIZE, overallCap - totalProcessed);
+        if (thisBatch <= 0) break;
+
         const { data, error } = await supabase.functions.invoke('analyze-conversations', {
           headers: { Authorization: `Bearer ${session.access_token}` },
           body: {
-            max_to_analyze: batchSize,
+            max_to_analyze: thisBatch,
             since_last: true,
             respect_tier: false,
             cutoff_days: cutoffDays,

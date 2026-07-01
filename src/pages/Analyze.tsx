@@ -84,9 +84,9 @@ export default function Analyze() {
       });
 
       console.log('🤖 Starting AI analysis with max:', tierLimits.maxAnalysis);
-      await analyzeConversations({ 
-        sinceLast: true, 
-        cutoffDays: tierLimits.sinceDays, 
+      await analyzeConversations({
+        sinceLast: true,
+        cutoffDays: 180, // analyze the synced history, not just the sync window
         max: tierLimits.maxAnalysis,
         onProgress: (processed, total, status) => {
           setAnalysisProgress({
