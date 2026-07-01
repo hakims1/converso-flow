@@ -179,10 +179,13 @@ if (cutoffDays) {
     // Limit free users to most recent 100 conversations
     const freeUserLimit = 100
     const effectiveMax = isFree ? Math.min(requestedMax, freeUserLimit) : requestedMax
-    
-    // For free users, analyze recent conversations within limit
-    // For paid users, use the standard since_last logic
-    const toAnalyze = isFree ? conversations.slice(0, effectiveMax) : candidates.slice(0, effectiveMax)
+
+    // Always analyze from the not-yet-analyzed set (candidates), for every tier.
+    // This is what lets the client loop small batches and actually make progress:
+    // each call takes the next N un-analyzed conversations instead of re-taking the
+    // same most-recent N every time (which previously left older threads, e.g. the
+    // Soundmap ones, never processed).
+    const toAnalyze = candidates.slice(0, effectiveMax)
     
     console.log(`Found ${conversations.length} conversations, ${candidates.length} candidates, analyzing ${toAnalyze.length} conversations`)
 
